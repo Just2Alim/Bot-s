@@ -6,6 +6,7 @@ import CreateBotDescribe from "./pages/CreateBotDescribe.jsx";
 import CreateBotStructure from "./pages/CreateBotStructure.jsx";
 import CreateBotSetup from "./pages/CreateBotSetup.jsx";
 import MyBots from "./pages/MyBots.jsx";
+import Settings from "./pages/Settings.jsx";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/create/setup" element={<CreateBotSetup />} />
         <Route path="/bots" element={<MyBots />} />
         <Route path="/bots/:botId" element={<MyBots />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
