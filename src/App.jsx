@@ -3,6 +3,7 @@ import Landing from "./pages/Landing.jsx";
 import AppLayout from "./layouts/AppLayout.jsx";
 import Overview from "./pages/Overview.jsx";
 import CreateBotDescribe from "./pages/CreateBotDescribe.jsx";
+import CreateBotStructure from "./pages/CreateBotStructure.jsx";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/overview" element={<Overview />} />
         <Route path="/create" element={<Navigate to="/create/describe" replace />} />
         <Route path="/create/describe" element={<CreateBotDescribe />} />
+        <Route path="/create/structure" element={<CreateBotStructure />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
