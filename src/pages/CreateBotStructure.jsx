@@ -6,7 +6,6 @@ export default function CreateBotStructure() {
   const navigate = useNavigate();
   const { description, features, toggleFeature } = useCreateBot();
 
-  // Без описания бизнеса этому шагу нечего показывать — вернём на шаг 1.
   useEffect(() => {
     if (!description.trim()) {
       navigate("/create/describe", { replace: true });

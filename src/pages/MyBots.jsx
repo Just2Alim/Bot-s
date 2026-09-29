@@ -23,8 +23,7 @@ export default function MyBots() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-[1fr_1fr_1fr_1.3fr]">
-        {/* Метрики пока моковые — реальная статистика появится, когда бот
-            будет подключён к бэкенду. */}
+        {}
         <StatCard label="Подписчиков" value={0} />
         <StatCard label="Сообщений" value={0} />
         <StatCard label="Записей" value={0} />

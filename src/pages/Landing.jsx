@@ -52,9 +52,10 @@ export default function Landing() {
 
         <div className="rounded-xl2 bg-white p-6 shadow-sm">
           <p className="mb-3 text-xs font-medium text-gray-400">Пример</p>
-          <div className="mb-3 ml-auto max-w-[85%] rounded-xl bg-accent-500 px-4 py-3 text-sm text-white">
-            У меня салон красоты. Нужен бот для записи и напоминаний.
-          </div>
+          <div className="mb-3 ml-auto max-w-[85%] rounded-xl bg-[#1D6FA5] px-4 py-3 text-sm text-white">
+  У меня салон красоты. Нужен бот для записи и напоминаний.
+</div>
+
           <div className="max-w-[85%] rounded-xl bg-gray-100 px-4 py-3 text-sm text-navy-950">
             Готово: запись клиентов, каталог услуг, напоминания и ответы на
             частые вопросы.
