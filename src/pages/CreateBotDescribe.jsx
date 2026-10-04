@@ -21,9 +21,7 @@ export default function CreateBotDescribe() {
 
   function selectCategory(key) {
     setCategory(key);
-    if (!description) {
-      setDescription(placeholderByCategory[key]);
-    }
+    setDescription(placeholderByCategory[key]);
   }
 
   function handleSubmit() {
