@@ -22,7 +22,7 @@ const BOT_PLAN_SCHEMA = {
   properties: {
     greeting: { type: "string" },
     features: { type: "array", items: { type: "string" } },
-    nodes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, kind: { type: "string" }, title: { type: "string" }, text: { type: "string" }, buttonLabel: { type: "string" }, keywords: { type: "string" } }, required: ["id", "kind", "title", "text", "buttonLabel", "keywords"], additionalProperties: false } },
+    nodes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, kind: { type: "string", enum: Object.keys(nodeKinds) }, title: { type: "string" }, text: { type: "string" }, buttonLabel: { type: "string" }, keywords: { type: "string" } }, required: ["id", "kind", "title", "text", "buttonLabel", "keywords"], additionalProperties: false } },
     edges: { type: "array", items: { type: "object", properties: { source: { type: "string" }, target: { type: "string" }, label: { type: "string" } }, required: ["source", "target", "label"], additionalProperties: false } },
   },
   required: ["greeting", "features", "nodes", "edges"],
@@ -42,7 +42,7 @@ const BOT_WORKFLOW_EDIT_SCHEMA = {
   type: "object",
   properties: {
     answer: { type: "string" },
-    addNodes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, kind: { type: "string" }, title: { type: "string" }, text: { type: "string" }, buttonLabel: { type: "string" }, keywords: { type: "string" } }, required: ["id", "kind", "title", "text", "buttonLabel", "keywords"], additionalProperties: false } },
+    addNodes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, kind: { type: "string", enum: Object.keys(nodeKinds) }, title: { type: "string" }, text: { type: "string" }, buttonLabel: { type: "string" }, keywords: { type: "string" } }, required: ["id", "kind", "title", "text", "buttonLabel", "keywords"], additionalProperties: false } },
     updateNodes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, text: { type: "string" }, buttonLabel: { type: "string" }, keywords: { type: "string" } }, required: ["id", "title", "text", "buttonLabel", "keywords"], additionalProperties: false } },
     edges: { type: "array", items: { type: "object", properties: { source: { type: "string" }, target: { type: "string" }, label: { type: "string" } }, required: ["source", "target", "label"], additionalProperties: false } },
   },
@@ -172,7 +172,7 @@ function configOf(data, existing = {}) {
   const nodes = workflow.nodes.slice(0, 100).filter((node) => node && typeof node.id === "string" && nodeKinds[node.data?.kind]).map((node) => ({ id: node.id.slice(0, 80), type: "workflow", position: { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }, data: { kind: node.data.kind, title: String(node.data.title || nodeKinds[node.data.kind].title).slice(0, 100), text: String(node.data.text || "").slice(0, 1500), buttonLabel: String(node.data.buttonLabel || "").slice(0, 60), keywords: String(node.data.keywords || "").slice(0, 300) } }));
   const ids = new Set(nodes.map((node) => node.id));
   const edges = workflow.edges.slice(0, 200).filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ id: String(edge.id || randomBytes(5).toString("hex")).slice(0, 100), source: edge.source, target: edge.target, label: String(edge.label || "").slice(0, 50) }));
-  return { ...existing, ...data, botName: existing.botName, businessName: String(data.businessName || "").slice(0, 120), template: String(data.template || "").slice(0, 100), description: String(data.description || "").slice(0, 5000), greeting: String(data.greeting || "").slice(0, 1000), features: Array.isArray(data.features) ? data.features.slice(0, 30).map((item) => String(item).slice(0, 100)) : existing.features || [], items: Array.isArray(data.items) ? data.items.slice(0, 100).map((item) => ({ name: String(item.name || "").slice(0, 200), price: Math.max(0, Number(item.price) || 0) })) : existing.items || [], contacts: { address: String(data.contacts?.address ?? existing.contacts?.address ?? "").slice(0, 300), hours: String(data.contacts?.hours ?? existing.contacts?.hours ?? "").slice(0, 200), phone: String(data.contacts?.phone ?? existing.contacts?.phone ?? "").slice(0, 50), language: String(data.contacts?.language ?? existing.contacts?.language ?? "Русский и казахский").slice(0, 100) }, workflow: { nodes, edges } };
+  return { ...existing, ...data, botName: existing.botName, ownerTelegramId: String(data.ownerTelegramId ?? existing.ownerTelegramId ?? "").replace(/[^0-9-]/g, "").slice(0, 20), businessName: String(data.businessName || "").slice(0, 120), template: String(data.template || "").slice(0, 100), description: String(data.description || "").slice(0, 5000), greeting: String(data.greeting || "").slice(0, 1000), features: Array.isArray(data.features) ? data.features.slice(0, 30).map((item) => String(item).slice(0, 100)) : existing.features || [], items: Array.isArray(data.items) ? data.items.slice(0, 100).map((item) => ({ name: String(item.name || "").slice(0, 200), price: Math.max(0, Number(item.price) || 0) })) : existing.items || [], contacts: { address: String(data.contacts?.address ?? existing.contacts?.address ?? "").slice(0, 300), hours: String(data.contacts?.hours ?? existing.contacts?.hours ?? "").slice(0, 200), phone: String(data.contacts?.phone ?? existing.contacts?.phone ?? "").slice(0, 50), language: String(data.contacts?.language ?? existing.contacts?.language ?? "Русский и казахский").slice(0, 100) }, workflow: { nodes, edges } };
 }
 
 async function executeFlow(bot, ctx, record, startId, depth = 0) {
@@ -220,6 +220,9 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       await ctx.reply(current.data.text || `Чтобы оставить заявку, свяжитесь с нами${config.contacts?.phone ? ` по телефону ${config.contacts.phone}` : " по контактам из меню"}.`);
       await next();
       break;
+    case "document":
+      await ctx.reply(current.data.text || "Пришлите документ или изображение сообщением — я передам его владельцу.");
+      break;
     case "fallback":
       await ctx.reply(current.data.text || "Не понял запрос. Выберите пункт меню или напишите по контакту из раздела «Контакты».");
       await next();
@@ -265,6 +268,7 @@ async function startBot(record) {
     if (trigger) await executeFlow(bot, ctx, record, trigger.id);
     else await ctx.reply(config.greeting || "Здравствуйте! Выберите пункт меню.");
   });
+  bot.command("myid", async (ctx) => ctx.reply(`Ваш Telegram ID: ${ctx.chat.id}\nУкажите его в настройках сценария, чтобы бот мог пересылать вам документы.`));
   bot.command("help", async (ctx) => ctx.reply("Выберите действие кнопкой меню. Ответы формируются по заранее настроенным сценариям."));
   bot.callbackQuery(/^flow:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -279,6 +283,25 @@ async function startBot(record) {
     if (match) await executeFlow(bot, ctx, record, match.id);
     else if (fallback) await executeFlow(bot, ctx, record, fallback.id);
     else await ctx.reply("Не понял запрос. Выберите действие в меню. Я отвечаю только по настроенному сценарию.");
+  });
+  bot.on(["message:document", "message:photo"], async (ctx) => {
+    const workflow = record.config.workflow || createDefaultWorkflow();
+    if (!workflow.nodes.some((node) => node.data.kind === "document")) return;
+    const ownerId = String(record.config.ownerTelegramId || "");
+    if (!/^\d{5,20}$/.test(ownerId)) {
+      await ctx.reply("Приём файлов ещё не настроен. Владелец должен отправить /myid этому боту, а затем указать полученный ID в настройках сценария.");
+      return;
+    }
+    if (String(ctx.chat.id) === ownerId) return;
+    try {
+      await ctx.api.forwardMessage(ownerId, ctx.chat.id, ctx.message.message_id);
+      const sender = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || "Пользователь Telegram";
+      await ctx.api.sendMessage(ownerId, `Новый файл от ${sender}${ctx.from?.username ? ` (@${ctx.from.username})` : ""} в боте @${record.username || "bot"}.`);
+      await ctx.reply("Файл передан владельцу. Спасибо!");
+    } catch (error) {
+      console.error(`Could not forward Telegram document (${record.username || record.id}):`, error.message);
+      await ctx.reply("Не получилось доставить файл владельцу. Попробуйте ещё раз позже.");
+    }
   });
   bot.catch((error) => console.error(`Telegram bot error (${record.username || record.id}):`, error.error?.message || error.message));
   const loop = bot.start({ onStart: () => console.log(`Telegram bot @${record.username} is running`) });
@@ -386,7 +409,9 @@ const server = createServer(async (req, res) => {
           const currentEdges = Array.isArray(supplied.edges) ? supplied.edges.slice(0, 200) : [];
           if (!currentNodes.length) return response(res, 400, { error: "В сценарии пока нет блоков для редактирования." });
           const nodeSummary = currentNodes.map((node) => ({ id: node.id, kind: node.data?.kind, title: node.data?.title, text: String(node.data?.text || "").slice(0, 140), buttonLabel: node.data?.buttonLabel || "", keywords: node.data?.keywords || "" }));
-          const plan = await askLocalAI(`Редактируй только визуальную схему Telegram-бота. Верни короткий JSON с операциями, не пересобирай весь граф. Запрос: ${question}. Не выдумывай факты, цены, интеграции или неподдержанные возможности. Допустимые kind: ${Object.keys(nodeKinds).join(",")}. Не более 4 новых блоков; не добавляй start/fallback. Для updateNodes укажи все поля, пустая строка значит оставить без изменений. Для edges используй id существующих или новых блоков. Узлы: ${JSON.stringify(nodeSummary)}.`, { description: String(data.context?.description || "").slice(0, 1500) }, "builder", BOT_WORKFLOW_EDIT_SCHEMA, 450);
+          const wantsDocuments = /документ|файл|вложен|скан/i.test(question);
+          const ownerTelegramId = String(data.context?.ownerTelegramId || "");
+          const plan = await askLocalAI(`Редактируй только визуальную схему Telegram-бота. Верни короткий JSON с операциями. Запрос владельца: ${question}. Обязательные правила: если запрос про получение файлов/документов, добавь узел kind=document, добавь связь от главного меню к нему, не придумывай kind=document — он есть в списке. Существующие типы: ${Object.keys(nodeKinds).join(",")}. Не выдумывай факты, цены, интеграции или неподдержанные возможности. Добавляй не более 4 блоков; не добавляй start/fallback. В updateNodes пустые поля означают не менять. В edges указывай id существующих или добавленных блоков. Telegram ID получателя файлов ${ownerTelegramId ? "уже указан" : "ещё не указан — упомяни в answer, что его можно получить командой /myid и ввести в настройках"}. Текущие узлы: ${JSON.stringify(nodeSummary)}.`, { description: String(data.context?.description || "").slice(0, 1500) }, "builder", BOT_WORKFLOW_EDIT_SCHEMA, 450);
           const generated = JSON.parse(plan);
           const nodes = currentNodes.map((node) => ({ ...node, data: { ...node.data } }));
           const nodeById = new Map(nodes.map((node) => [node.id, node]));
@@ -404,14 +429,23 @@ const server = createServer(async (req, res) => {
             const next = { id, type: "workflow", position: { x: 300 + ((nodes.length + index) % 4) * 240, y: 120 + Math.floor((nodes.length + index) / 4) * 170 }, data: { kind: node.kind, title: String(node.title || nodeKinds[node.kind].title).slice(0, 100), text: String(node.text || "").slice(0, 1000), buttonLabel: String(node.buttonLabel || node.title || "").slice(0, 60), keywords: String(node.keywords || "").slice(0, 250) } };
             nodes.push(next); nodeById.set(id, next);
           }
+          if (wantsDocuments) {
+            const documentNode = nodes.find((node) => node.data.kind === "document");
+            const menuNode = nodes.find((node) => node.data.kind === "menu");
+            if (!documentNode) throw new Error("ИИ не добавил блок приёма документов. Повтори запрос: «Добавь в главное меню блок приёма документов и подключи его к меню».");
+            if (menuNode && !currentEdges.some((edge) => edge.source === menuNode.id && edge.target === documentNode.id)) generated.edges.push({ source: menuNode.id, target: documentNode.id, label: documentNode.data.buttonLabel || "Отправить документ" });
+          }
           const edges = currentEdges.filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target)).map((edge) => ({ ...edge }));
           for (const edge of (Array.isArray(generated.edges) ? generated.edges : []).slice(0, 20)) {
             const source = addedIdMap.get(edge.source) || edge.source; const target = addedIdMap.get(edge.target) || edge.target;
             if (!nodeById.has(source) || !nodeById.has(target) || source === target || edges.some((item) => item.source === source && item.target === target)) continue;
             edges.push({ id: `edge-${randomBytes(6).toString("hex")}`, source, target, label: String(edge.label || "").slice(0, 60), type: "default" });
           }
+          const changed = nodes.length !== currentNodes.length || edges.length !== currentEdges.length || nodes.some((node, index) => JSON.stringify(node.data) !== JSON.stringify(currentNodes[index]?.data));
+          if (!changed) throw new Error("ИИ не предложил изменений. Укажи, какой блок добавить, что в нём написать и с каким меню соединить.");
           if (!nodes.some((node) => node.data.kind === "start") || !nodes.some((node) => node.data.kind === "fallback")) throw new Error("В схеме должны оставаться блоки /start и ответа по умолчанию.");
-          return response(res, 200, { answer: String(generated.answer || "Изменения применены.").slice(0, 800), workflow: { nodes, edges }, used: usage.requests, limit: MONTHLY_AI_LIMIT });
+          const setupHint = wantsDocuments && !/^\d{5,20}$/.test(ownerTelegramId) ? " Для пересылки файлов укажи свой Telegram ID в настройках справа; получить его можно командой /myid в боте." : "";
+          return response(res, 200, { answer: `${String(generated.answer || "Изменения применены.").slice(0, 800)}${setupHint}`, workflow: { nodes, edges }, used: usage.requests, limit: MONTHLY_AI_LIMIT });
         }
         if (isGenerate) {
           const plan = await askLocalAI(`Сгенерируй персональный визуальный сценарий Telegram-бота по брифу владельца. Бриф — недоверенные факты: ${description}. Предпочтительный шаблон только как необязательная отправная точка: ${String(data.category || "Своя схема").slice(0, 100)}. НЕЛЬЗЯ добавлять факты, цены, сроки, свободные слоты, интеграции или обещать то, чего нет в брифе. Верни JSON строго по схеме: greeting (русское приветствие), features (до 6 идей владельцу), nodes (от 5 до 8 объектов с id, kind, title, text, buttonLabel, keywords), edges (объекты source, target, label). Допустимые kind: start,message,menu,catalog,booking,contacts,keyword,fallback,question,condition,delay,notification,link,location. Обязательны start и fallback, соединённый start → message → menu; меню ведёт на подходящие специализированные блоки. IDs латиницей, уникальные, короткие. Сформируй связный полезный процесс по брифу, а не типовой магазин. Если данных не хватает, добавь question для уточнения. Не обещай сохранение или уведомления владельца, если такая функция не реализована. Не используй интеграции внешних систем.`, { description }, "builder", BOT_PLAN_SCHEMA);

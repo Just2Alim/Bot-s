@@ -3,6 +3,7 @@ export const nodeKinds = {
   message: { title: "Сообщение", icon: "💬", color: "border-blue-300" },
   menu: { title: "Меню кнопок", icon: "☷", color: "border-violet-300" },
   catalog: { title: "Каталог", icon: "🛍️", color: "border-amber-300" },
+  document: { title: "Приём документов", icon: "📎", color: "border-blue-400" },
   booking: { title: "Заявка / запись", icon: "📝", color: "border-pink-300" },
   question: { title: "Спросить / собрать данные", icon: "❓", color: "border-orange-300" },
   condition: { title: "Проверка условия", icon: "◇", color: "border-fuchsia-300" },
