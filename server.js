@@ -4,7 +4,7 @@ import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
-import { Bot, InlineKeyboard } from "grammy";
+import { Bot, InlineKeyboard, Keyboard } from "grammy";
 import { botLaunchIdFromPath, createDefaultWorkflow, nodeKinds } from "./src/workflow.js";
 import { createReadStream } from "node:fs";
 
@@ -169,11 +169,15 @@ async function askLocalAI(prompt, config, mode = "customer", format = undefined,
 
 function configOf(data, existing = {}) {
   const workflow = Array.isArray(data.workflow?.nodes) && Array.isArray(data.workflow?.edges) ? data.workflow : existing.workflow || createDefaultWorkflow();
-  const nodes = workflow.nodes.slice(0, 100).filter((node) => node && typeof node.id === "string" && nodeKinds[node.data?.kind]).map((node) => ({ id: node.id.slice(0, 80), type: "workflow", position: { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }, data: { kind: node.data.kind, title: String(node.data.title || nodeKinds[node.data.kind].title).slice(0, 100), text: String(node.data.text || "").slice(0, 1500), buttonLabel: String(node.data.buttonLabel || "").slice(0, 60), keywords: String(node.data.keywords || "").slice(0, 300) } }));
+  const safeUrl = (value) => { try { const url = new URL(String(value || "")); return url.protocol === "https:" ? url.toString().slice(0, 1000) : ""; } catch { return ""; } };
+  const nodes = workflow.nodes.slice(0, 100).filter((node) => node && typeof node.id === "string" && nodeKinds[node.data?.kind]).map((node) => ({ id: node.id.slice(0, 80), type: "workflow", position: { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }, data: { kind: node.data.kind, title: String(node.data.title || nodeKinds[node.data.kind].title).slice(0, 100), text: String(node.data.text || "").slice(0, 1500), buttonLabel: String(node.data.buttonLabel || "").slice(0, 60), keywords: String(node.data.keywords || "").slice(0, 300), url: safeUrl(node.data.url), condition: String(node.data.condition || "").slice(0, 300) } }));
   const ids = new Set(nodes.map((node) => node.id));
   const edges = workflow.edges.slice(0, 200).filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ id: String(edge.id || randomBytes(5).toString("hex")).slice(0, 100), source: edge.source, target: edge.target, label: String(edge.label || "").slice(0, 50) }));
   return { ...existing, ...data, botName: existing.botName, ownerTelegramId: String(data.ownerTelegramId ?? existing.ownerTelegramId ?? "").replace(/[^0-9-]/g, "").slice(0, 20), businessName: String(data.businessName || "").slice(0, 120), template: String(data.template || "").slice(0, 100), description: String(data.description || "").slice(0, 5000), greeting: String(data.greeting || "").slice(0, 1000), features: Array.isArray(data.features) ? data.features.slice(0, 30).map((item) => String(item).slice(0, 100)) : existing.features || [], items: Array.isArray(data.items) ? data.items.slice(0, 100).map((item) => ({ name: String(item.name || "").slice(0, 200), price: Math.max(0, Number(item.price) || 0) })) : existing.items || [], contacts: { address: String(data.contacts?.address ?? existing.contacts?.address ?? "").slice(0, 300), hours: String(data.contacts?.hours ?? existing.contacts?.hours ?? "").slice(0, 200), phone: String(data.contacts?.phone ?? existing.contacts?.phone ?? "").slice(0, 50), language: String(data.contacts?.language ?? existing.contacts?.language ?? "Русский и казахский").slice(0, 100) }, workflow: { nodes, edges } };
 }
+
+const conversationState = new Map();
+function workflowStateKey(bot, chatId) { return `${bot.botInfo?.id || "bot"}:${chatId}`; }
 
 async function executeFlow(bot, ctx, record, startId, depth = 0) {
   if (depth > 15) return;
@@ -220,6 +224,27 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       await ctx.reply(current.data.text || `Чтобы оставить заявку, свяжитесь с нами${config.contacts?.phone ? ` по телефону ${config.contacts.phone}` : " по контактам из меню"}.`);
       await next();
       break;
+    case "handoff":
+      if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
+        await ctx.api.sendMessage(config.ownerTelegramId, `Новый запрос оператору из @${record.username || "бота"}.\nОт пользователя: ${ctx.from?.first_name || "Пользователь"}${ctx.from?.username ? ` (@${ctx.from.username})` : ""}\nTelegram ID: ${ctx.chat.id}`);
+        await ctx.reply(current.data.text || "Передал запрос команде. Мы свяжемся с вами.");
+      } else await ctx.reply("Владелец ещё не настроил получение обращений. Напишите по контактам в меню.");
+      break;
+    case "payment": {
+      const url = String(current.data.url || "");
+      if (/^https:\/\//i.test(url)) await ctx.reply(current.data.text || "Перейдите по ссылке для оплаты:", { reply_markup: new InlineKeyboard().url(current.data.buttonLabel || "Оплатить", url) });
+      else await ctx.reply("Ссылка на оплату ещё не настроена. Владелец может добавить её в настройках блока.");
+      await next();
+      break;
+    }
+    case "feedback":
+      await ctx.reply(current.data.text || "Оцените наш сервис от 1 до 5 и напишите комментарий.");
+      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "feedback", nodeId: current.id });
+      break;
+    case "subscribe":
+      await ctx.reply(current.data.text || "Чтобы подписаться на новости, напишите «Подписаться».");
+      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "subscribe", nodeId: current.id });
+      break;
     case "document":
       await ctx.reply(current.data.text || "Пришлите документ или изображение сообщением — я передам его владельцу.");
       break;
@@ -232,6 +257,7 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       break;
     case "question":
       await ctx.reply(current.data.text || "Напишите ответ сообщением, чтобы продолжить.");
+      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "question", nodeId: current.id });
       break;
     case "condition":
       await ctx.reply(current.data.text || "Для продолжения выберите подходящий вариант:");
@@ -242,16 +268,20 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       await next();
       break;
     case "notification":
-      await ctx.reply(current.data.text || "Для связи с владельцем воспользуйтесь контактами в меню.");
+      if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
+        await ctx.api.sendMessage(config.ownerTelegramId, `${current.data.text || "Новое уведомление"}\nОт: ${ctx.from?.first_name || "Пользователь"}${ctx.from?.username ? ` (@${ctx.from.username})` : ""}\nID: ${ctx.chat.id}`);
+        await ctx.reply("Передал сообщение владельцу.");
+      } else await ctx.reply("Владелец ещё не настроил Telegram ID для уведомлений. Используйте контакты в меню.");
       await next();
       break;
     case "link":
-      await ctx.reply(current.data.text || "Откройте ссылку из настроек бота.");
+      if (/^https:\/\//i.test(String(current.data.url || ""))) await ctx.reply(current.data.text || "Откройте страницу по кнопке:", { reply_markup: new InlineKeyboard().url(current.data.buttonLabel || "Открыть", current.data.url) });
+      else await ctx.reply(current.data.text || "Ссылка ещё не настроена. Владелец может добавить HTTPS-ссылку в редакторе.");
       await next();
       break;
     case "location":
-      await ctx.reply(current.data.text || "Отправьте адрес текстом или воспользуйтесь контактами в меню.");
-      await next();
+      await ctx.reply(current.data.text || "Поделитесь геолокацией или напишите адрес текстом.", { reply_markup: new Keyboard().requestLocation("📍 Отправить геолокацию").resized().oneTime() });
+      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "location", nodeId: current.id });
       break;
     default:
       break;
@@ -278,11 +308,52 @@ async function startBot(record) {
     const text = ctx.message.text.trim();
     if (text.startsWith("/")) return;
     const workflow = config.workflow || createDefaultWorkflow();
+    const stateKey = workflowStateKey(bot, ctx.chat.id);
+    const pending = conversationState.get(stateKey);
+    if (pending) {
+      conversationState.delete(stateKey);
+      const pendingNode = workflow.nodes.find((node) => node.id === pending.nodeId);
+      if (pending.kind === "subscribe") {
+        const subscribed = /^(да|подписаться|хочу|yes|иә)$/i.test(text);
+        if (subscribed && config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) await ctx.api.sendMessage(config.ownerTelegramId, `Новая подписка на новости в @${record.username || "бота"}: ${ctx.from?.first_name || "Пользователь"} (ID ${ctx.chat.id}).`);
+        await ctx.reply(subscribed ? "Спасибо! Передал ваш запрос владельцу. Рассылку новостей владелец сможет организовать отдельно." : "Хорошо, подписку не оформлял.");
+        return;
+      }
+      if (pending.kind === "location") {
+        if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) await ctx.api.sendMessage(config.ownerTelegramId, `Адрес от ${ctx.from?.first_name || "Пользователя"} (ID ${ctx.chat.id}):\n${text.slice(0, 1000)}`);
+        await ctx.reply("Спасибо! Передал адрес владельцу.", { reply_markup: { remove_keyboard: true } });
+        const outgoing = workflow.edges.filter((edge) => edge.source === pending.nodeId);
+        if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
+        return;
+      }
+      if (pendingNode && ["question", "feedback"].includes(pending.kind)) {
+        if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) await ctx.api.sendMessage(config.ownerTelegramId, `Новое ${pending.kind === "feedback" ? "сообщение/отзыв" : "обращение"} в @${record.username || "бота"}.\nОт: ${ctx.from?.first_name || "Пользователь"}${ctx.from?.username ? ` (@${ctx.from.username})` : ""}\nID: ${ctx.chat.id}\n\n${text.slice(0, 3500)}`);
+        await ctx.reply(pending.kind === "feedback" ? "Спасибо за обратную связь!" : "Спасибо! Ваш ответ записан, владелец свяжется с вами.");
+        const outgoing = workflow.edges.filter((edge) => edge.source === pending.nodeId);
+        if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
+        return;
+      }
+    }
     const match = workflow.nodes.find((node) => node.data.kind === "keyword" && node.data.keywords.split(",").map((word) => word.trim().toLowerCase()).filter(Boolean).some((word) => text.toLowerCase().includes(word)));
     const fallback = workflow.nodes.find((node) => node.data.kind === "fallback");
     if (match) await executeFlow(bot, ctx, record, match.id);
     else if (fallback) await executeFlow(bot, ctx, record, fallback.id);
     else await ctx.reply("Не понял запрос. Выберите действие в меню. Я отвечаю только по настроенному сценарию.");
+  });
+  bot.on("message:location", async (ctx) => {
+    const stateKey = workflowStateKey(bot, ctx.chat.id);
+    const pending = conversationState.get(stateKey);
+    if (!pending || pending.kind !== "location") return;
+    conversationState.delete(stateKey);
+    const location = ctx.message.location;
+    if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
+      await ctx.api.sendLocation(config.ownerTelegramId, location.latitude, location.longitude);
+      await ctx.api.sendMessage(config.ownerTelegramId, `Геолокация от ${ctx.from?.first_name || "Пользователя"} (ID ${ctx.chat.id}) в @${record.username || "боте"}.`);
+      await ctx.reply("Геолокация передана владельцу. Спасибо!", { reply_markup: { remove_keyboard: true } });
+      const workflow = config.workflow || createDefaultWorkflow();
+      const outgoing = workflow.edges.filter((edge) => edge.source === pending.nodeId);
+      if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
+    } else await ctx.reply("Владелец ещё не настроил получение геолокации. Отправьте адрес текстом.", { reply_markup: { remove_keyboard: true } });
   });
   bot.on(["message:document", "message:photo"], async (ctx) => {
     const workflow = record.config.workflow || createDefaultWorkflow();
