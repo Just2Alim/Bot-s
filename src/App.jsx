@@ -5,6 +5,9 @@ import Overview from "./pages/Overview.jsx";
 import CreateBotDescribe from "./pages/CreateBotDescribe.jsx";
 import CreateBotStructure from "./pages/CreateBotStructure.jsx";
 import CreateBotSetup from "./pages/CreateBotSetup.jsx";
+import CreateBotToken from "./pages/CreateBotToken.jsx";
+import CreateBotLaunch from "./pages/CreateBotLaunch.jsx";
+import BotFlowEditor from "./pages/BotFlowEditor.jsx";
 import MyBots from "./pages/MyBots.jsx";
 import Settings from "./pages/Settings.jsx";
 
@@ -15,11 +18,15 @@ export default function App() {
 
       <Route element={<AppLayout />}>
         <Route path="/overview" element={<Overview />} />
-        <Route path="/create" element={<Navigate to="/create/describe" replace />} />
+        <Route path="/create" element={<Navigate to="/create/token" replace />} />
+        <Route path="/create/token" element={<CreateBotToken />} />
         <Route path="/create/describe" element={<CreateBotDescribe />} />
         <Route path="/create/structure" element={<CreateBotStructure />} />
+        <Route path="/create/flow" element={<BotFlowEditor />} />
         <Route path="/create/setup" element={<CreateBotSetup />} />
+        <Route path="/create/launch" element={<CreateBotLaunch />} />
         <Route path="/bots" element={<MyBots />} />
+        <Route path="/bots/:botId/edit" element={<BotFlowEditor />} />
         <Route path="/bots/:botId" element={<MyBots />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

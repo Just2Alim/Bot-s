@@ -1,62 +1,71 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createDefaultWorkflow } from "../workflow.js";
 
-const defaultFeatures = {
-  booking: { label: "Запись клиентов", hint: "Онлайн-календарь", enabled: true },
-  catalog: { label: "Каталог услуг", hint: "Список и цены", enabled: true },
-  reminders: { label: "Напоминания", hint: "За день до визита", enabled: true },
-  faq: { label: "Частые вопросы", hint: "Автоответы", enabled: true },
-  payments: { label: "Оплата онлайн", hint: "Приём предоплаты", enabled: false },
-  reviews: { label: "Отзывы клиентов", hint: "После визита", enabled: false },
+const storageKey = "bots-kz-workspace-v1";
+const templates = {
+  shop: {
+    label: "Магазин",
+    emoji: "🛍️",
+    description: "Онлайн-магазин одежды и аксессуаров в Алматы. Каталог товаров, заказ через Telegram, доставка по Казахстану и ответы на вопросы на русском и казахском.",
+    features: ["Каталог товаров", "Корзина и заявки", "Доставка по Казахстану", "Частые вопросы", "Уведомления о заказах"],
+    items: [{ name: "Футболка базовая", price: 9900 }, { name: "Сумка шоппер", price: 7500 }, { name: "Кепка", price: 6500 }],
+    greeting: "Сәлем! Здравствуйте! Добро пожаловать в наш магазин. Выберите товар в каталоге или задайте вопрос — поможем на русском и казахском.",
+  },
+  beauty: {
+    label: "Салон и услуги",
+    emoji: "✂️",
+    description: "Салон красоты в Алматы. Запись к мастерам, услуги и цены, напоминания о визите и ответы клиентам на русском и казахском языках.",
+    features: ["Запись клиентов", "Услуги и цены", "Выбор мастера", "Напоминания о визите", "Частые вопросы"],
+    items: [{ name: "Женская стрижка", price: 8000 }, { name: "Маникюр", price: 10000 }, { name: "Укладка", price: 7000 }],
+    greeting: "Сәлеметсіз бе! Здравствуйте! Поможем записаться, посмотреть цены и выбрать удобное время.",
+  },
+  cafe: {
+    label: "Кафе и доставка еды",
+    emoji: "☕",
+    description: "Кофейня в Алматы. Меню, предварительный заказ и бронь столика. Работаем на русском и казахском, доставка по ближайшим районам.",
+    features: ["Меню и цены", "Предзаказ", "Бронь столика", "Часы работы и адрес", "Акции и уведомления"],
+    items: [{ name: "Капучино", price: 1600 }, { name: "Завтрак дня", price: 3200 }, { name: "Чизкейк", price: 2400 }],
+    greeting: "Сәлем! Здравствуйте! Посмотрите меню, закажите заранее или забронируйте столик.",
+  },
 };
+
+function getInitialState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    const category = templates[saved.category] ? saved.category : "shop";
+    return { category, description: saved.description || templates[category].description, businessName: saved.businessName || "", features: saved.features || templates[category].features, items: saved.items || templates[category].items, contacts: saved.contacts || { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, workflow: saved.workflow || createDefaultWorkflow(), botId: saved.botId || "", botUsername: saved.botUsername || "", botName: saved.botName || "", verified: false, status: saved.status || "Черновик", greeting: saved.greeting || templates[category].greeting };
+  } catch {
+    return { category: "shop", description: templates.shop.description, businessName: "", features: templates.shop.features, items: templates.shop.items, contacts: { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, workflow: createDefaultWorkflow(), botId: "", botUsername: "", botName: "", verified: false, status: "Черновик", greeting: templates.shop.greeting };
+  }
+}
 
 const CreateBotContext = createContext(null);
 
 export function CreateBotProvider({ children }) {
-  const [category, setCategory] = useState(null);
-  const [description, setDescription] = useState("");
-  const [features, setFeatures] = useState(defaultFeatures);
-  const [services, setServices] = useState([
-    { name: "Стрижка", price: 5000 },
-    { name: "Маникюр", price: 4000 },
-    { name: "Окрашивание", price: 12000 },
-  ]);
-  const [contacts, setContacts] = useState({
-    hours: "Пн–Сб, 10:00–20:00",
-    address: "",
-    channel: "",
-  });
+  const [state, setState] = useState(getInitialState);
+  useEffect(() => {
+    const safeState = Object.fromEntries(Object.entries(state).filter(([key]) => key !== "verified"));
+    localStorage.setItem(storageKey, JSON.stringify(safeState));
+  }, [state]);
 
-  function toggleFeature(key) {
-    setFeatures((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], enabled: !prev[key].enabled },
-    }));
-  }
+  const actions = useMemo(() => ({
+    setField: (field, value) => setState((prev) => ({ ...prev, [field]: value })),
+    setContact: (field, value) => setState((prev) => ({ ...prev, contacts: { ...prev.contacts, [field]: value } })),
+    toggleFeature: (feature) => setState((prev) => ({ ...prev, features: prev.features.includes(feature) ? prev.features.filter((item) => item !== feature) : [...prev.features, feature] })),
+    applyAiPlan: (plan) => setState((prev) => ({ ...prev, greeting: plan.greeting || prev.greeting })),
+    updateItem: (index, field, value) => setState((prev) => ({ ...prev, items: prev.items.map((item, i) => i === index ? { ...item, [field]: value } : item) })),
+    removeItem: (index) => setState((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== index) })),
+    addItem: () => setState((prev) => ({ ...prev, items: [...prev.items, { name: "Новый товар или услуга", price: 0 }] })),
+    chooseTemplate: (category) => { const template = templates[category]; setState((prev) => ({ ...prev, category, description: template.description, features: template.features, items: template.items, greeting: template.greeting, status: "Черновик" })); },
+    setState,
+  }), []);
 
-  const value = {
-    category,
-    setCategory,
-    description,
-    setDescription,
-    features,
-    toggleFeature,
-    services,
-    setServices,
-    contacts,
-    setContacts,
-  };
-
-  return (
-    <CreateBotContext.Provider value={value}>
-      {children}
-    </CreateBotContext.Provider>
-  );
+  return <CreateBotContext.Provider value={{ ...state, ...actions, templates }}>{children}</CreateBotContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useCreateBot() {
-  const ctx = useContext(CreateBotContext);
-  if (!ctx) {
-    throw new Error("useCreateBot must be used inside <CreateBotProvider>");
-  }
-  return ctx;
+  const context = useContext(CreateBotContext);
+  if (!context) throw new Error("useCreateBot must be used inside <CreateBotProvider>");
+  return context;
 }

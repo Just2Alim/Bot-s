@@ -3,7 +3,7 @@ import Logo from "./Logo.jsx";
 
 const links = [
   { to: "/overview", label: "Обзор" },
-  { to: "/create/describe", label: "Создать бота", matchPrefix: "/create" },
+  { to: "/create/token", label: "Создать бота", matchPrefix: "/create" },
   { to: "/bots", label: "Мои боты" },
   { to: "/settings", label: "Настройки" },
 ];

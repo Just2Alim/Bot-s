@@ -1,124 +1,20 @@
 import { useNavigate } from "react-router-dom";
+import CreateBotProgress from "../components/CreateBotProgress.jsx";
 import { useCreateBot } from "../context/CreateBotContext.jsx";
 
 export default function CreateBotSetup() {
   const navigate = useNavigate();
-  const { services, setServices, contacts, setContacts } = useCreateBot();
-
-  function updateService(index, field, value) {
-    setServices((prev) =>
-      prev.map((s, i) => (i === index ? { ...s, [field]: value } : s))
-    );
-  }
-
-  function addService() {
-    setServices((prev) => [...prev, { name: "Новая услуга", price: 0 }]);
-  }
-
-  function updateContact(field, value) {
-    setContacts((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function handleLaunch() {
-    navigate("/bots");
-  }
-
-  return (
-    <div>
-      <p className="mb-4 text-sm text-gray-400">
-        Создать бота / <span className="text-gray-600">Настройка</span>
-      </p>
-
-      <div className="grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
-        <div className="rounded-xl2 bg-white p-8 shadow-sm">
-          <h2 className="font-display text-xl font-bold text-navy-950">
-            Услуги и цены
-          </h2>
-
-          <div className="mt-4 divide-y divide-gray-100">
-            {services.map((service, i) => (
-              <div key={i} className="flex items-center gap-3 py-3">
-                <input
-                  value={service.name}
-                  onChange={(e) => updateService(i, "name", e.target.value)}
-                  className="flex-1 bg-transparent text-sm text-navy-950 outline-none"
-                />
-                <input
-                  type="number"
-                  value={service.price}
-                  onChange={(e) =>
-                    updateService(i, "price", Number(e.target.value))
-                  }
-                  className="w-24 bg-transparent text-right text-sm text-gray-500 outline-none"
-                />
-                <span className="text-sm text-gray-400">₸</span>
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={addService}
-            className="mt-3 text-sm font-medium text-accent-600 hover:underline"
-          >
-            + Добавить услугу
-          </button>
-        </div>
-
-        <div className="rounded-xl2 bg-white p-8 shadow-sm">
-          <h2 className="font-display text-xl font-bold text-navy-950">
-            Контакты и график
-          </h2>
-
-          <div className="mt-4 flex flex-col gap-4">
-            <Field
-              label="Часы работы"
-              value={contacts.hours}
-              onChange={(v) => updateContact("hours", v)}
-            />
-            <Field
-              label="Адрес"
-              value={contacts.address}
-              placeholder="Алматы, ул. Достык 12"
-              onChange={(v) => updateContact("address", v)}
-            />
-            <Field
-              label="Telegram-канал"
-              value={contacts.channel}
-              placeholder="@salon_beauty_bot"
-              onChange={(v) => updateContact("channel", v)}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 flex max-w-4xl justify-between">
-        <button
-          onClick={() => navigate("/create/structure")}
-          className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-navy-950 hover:bg-white"
-        >
-          Назад
-        </button>
-        <button
-          onClick={handleLaunch}
-          className="rounded-lg bg-navy-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-900"
-        >
-          Сохранить и запустить
-        </button>
-      </div>
-    </div>
-  );
+  const { category, items, updateItem, addItem, removeItem, contacts, setContact, features, templates, description, businessName, setField, greeting, botId } = useCreateBot();
+  const label = category === "shop" ? "Товары" : category === "cafe" ? "Позиции меню" : "Услуги";
+  return <div><CreateBotProgress /><div className="grid max-w-5xl gap-6 lg:grid-cols-[1.1fr_.9fr]">
+    <section className="rounded-2xl bg-white p-7 shadow-sm sm:p-9"><h1 className="font-display text-2xl font-bold text-navy-950">Содержание бота</h1><p className="mt-2 text-sm text-gray-500">Добавьте товары, услуги и контакты. Валюта — тенге (₸).</p>
+      <div className="mt-6"><h2 className="text-sm font-semibold text-navy-950">{label}</h2><p className="mt-1 text-xs leading-5 text-amber-700">Шаблонные товары и цены — примеры. Перед запуском замени или удали их, чтобы клиенты видели только актуальный каталог.</p><div className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-100 px-4">{items.map((item, index) => <div key={index} className="flex items-center gap-2 py-3"><input aria-label={`${label}: название`} value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" /><input aria-label="Цена в тенге" type="number" min="0" value={item.price} onChange={(event) => updateItem(index, "price", Number(event.target.value))} className="w-24 bg-transparent text-right text-sm outline-none" /><span className="text-sm text-gray-400">₸</span><button type="button" aria-label="Удалить позицию" onClick={() => removeItem(index)} className="rounded px-2 text-lg text-red-500 hover:bg-red-50">×</button></div>)}</div><button onClick={addItem} className="mt-3 text-sm font-medium text-accent-600 hover:underline">+ Добавить позицию</button></div>
+      <div className="mt-7 grid gap-4 sm:grid-cols-2"><Field label="Название бизнеса" value={businessName} onChange={(value) => setField("businessName", value)} placeholder="Например, «Север»" /><Field label="График работы" value={contacts.hours} onChange={(value) => setContact("hours", value)} placeholder="Ежедневно, 10:00–20:00" /><Field label="Адрес и город" value={contacts.address} onChange={(value) => setContact("address", value)} placeholder="Алматы, улица Абая, 10" /><Field label="Телефон для связи" value={contacts.phone} onChange={(value) => setContact("phone", value)} placeholder="+7 7XX XXX XX XX" /><Field label="Язык общения" value={contacts.language} onChange={(value) => setContact("language", value)} placeholder="Русский и казахский" /></div>
+      <label className="mt-5 block"><span className="mb-2 block text-sm font-semibold text-navy-950">Приветствие</span><textarea rows={3} value={greeting} onChange={(event) => setField("greeting", event.target.value)} className="w-full resize-y rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm leading-6 outline-none focus:border-accent-500" /></label>
+      <div className="mt-7 flex justify-between"><button onClick={() => navigate("/create/structure")} className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-navy-950 hover:bg-gray-50">Назад</button><button onClick={() => navigate("/create/launch")} className="rounded-xl bg-navy-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-900">Проверить и продолжить →</button></div>
+    </section>
+    <aside className="h-fit rounded-2xl bg-white p-6 shadow-sm"><p className="text-sm font-semibold text-navy-950">Предпросмотр бота</p><p className="mt-1 text-xs text-gray-400">Так будут выглядеть первые сообщения</p><div className="mt-5 rounded-2xl bg-[#e8f1f6] p-4"><div className="max-w-[90%] rounded-xl rounded-tl-none bg-white p-3 text-sm leading-5 text-navy-950">{greeting}</div><div className="mt-2 rounded-xl rounded-tl-none bg-white p-3 text-xs leading-5 text-gray-600">{features.join(" · ")}</div></div><p className="mt-5 text-xs font-semibold text-navy-950">{templates[category]?.emoji} {templates[category]?.label}</p><p className="mt-2 text-xs leading-5 text-gray-500">{description}</p><p className="mt-5 rounded-lg bg-blue-50 p-3 text-xs leading-5 text-blue-800">{botId ? "Токен уже зашифрован и сохранён локальным сервером." : "Сначала подключи токен бота."}</p></aside>
+  </div></div>;
 }
 
-function Field({ label, value, onChange, placeholder }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs text-gray-400">{label}</span>
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg bg-gray-50 px-4 py-2.5 text-sm text-navy-950 outline-none ring-1 ring-gray-200 focus:ring-accent-500"
-      />
-    </label>
-  );
-}
+function Field({ label, value, onChange, placeholder }) { return <label className="block"><span className="mb-1.5 block text-xs font-medium text-gray-500">{label}</span><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-accent-500" /></label>; }

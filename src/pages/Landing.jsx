@@ -28,15 +28,15 @@ export default function Landing() {
       <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-10 py-24 md:grid-cols-2">
         <div>
           <h1 className="font-display text-5xl font-extrabold leading-tight text-navy-950">
-            От идеи до Telegram-бота за 5 минут
+            Ваш бизнес в Telegram — на русском и казахском
           </h1>
           <p className="mt-6 max-w-md text-gray-500">
-            Опишите бизнес обычным текстом — платформа сама соберёт структуру
-            бота. Без программиста и лишних затрат.
+            Подключите бота из BotFather, выберите шаблон для магазина, кафе
+            или услуг и подготовьте сценарий общения шаг за шагом.
           </p>
           <div className="mt-8 flex gap-3">
             <Link
-              to="/create/describe"
+              to="/create/token"
               className="rounded-lg bg-navy-950 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy-900"
             >
               Создать бота
@@ -57,10 +57,13 @@ export default function Landing() {
 </div>
 
           <div className="max-w-[85%] rounded-xl bg-gray-100 px-4 py-3 text-sm text-navy-950">
-            Готово: запись клиентов, каталог услуг, напоминания и ответы на
-            частые вопросы.
+            Шаблон подготовит каталог, заявки и ответы на частые вопросы. Добавьте
+            описание вашего бизнеса и настройте всё под себя.
           </div>
         </div>
+      </section>
+      <section id="features" className="mx-auto grid max-w-6xl gap-4 px-10 pb-16 md:grid-cols-3">
+        {[{ emoji: "🛍️", title: "Магазин", copy: "Каталог, заявки и доставка по Казахстану." }, { emoji: "✂️", title: "Услуги", copy: "Запись, прайс и напоминания клиентам." }, { emoji: "☕", title: "Кафе", copy: "Меню, предзаказ и бронь столика." }].map((card) => <div key={card.title} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"><span className="text-2xl">{card.emoji}</span><h2 className="mt-3 font-display text-lg font-bold text-navy-950">{card.title}</h2><p className="mt-2 text-sm leading-6 text-gray-500">{card.copy}</p></div>)}
       </section>
     </div>
   );

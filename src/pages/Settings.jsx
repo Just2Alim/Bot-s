@@ -1,12 +1,11 @@
+import { useEffect, useState } from "react";
+import { useCreateBot } from "../context/CreateBotContext.jsx";
+
 export default function Settings() {
-  return (
-    <div className="rounded-xl2 bg-white p-10 shadow-sm">
-      <h1 className="font-display text-2xl font-bold text-navy-950">
-        Настройки
-      </h1>
-      <p className="mt-2 max-w-md text-sm text-gray-500">
-        В разработке :)
-      </p>
-    </div>
-  );
+  const { botUsername, botName } = useCreateBot();
+  const [health, setHealth] = useState(null);
+  useEffect(() => { fetch("/api/health").then((response) => response.json()).then(setHealth).catch(() => setHealth({ ok: false })); }, []);
+  return <div className="max-w-4xl"><p className="mb-4 text-sm text-gray-400">Рабочее пространство / <span className="text-gray-600">Настройки</span></p><div className="rounded-2xl bg-white p-7 shadow-sm sm:p-9"><h1 className="font-display text-2xl font-bold text-navy-950">Локальное рабочее пространство</h1><p className="mt-2 text-sm leading-6 text-gray-500">Твои боты и модель ИИ работают на этом компьютере. Никакого аккаунта или облачного сервера для первого бота не нужно.</p><section className="mt-7 border-t border-gray-100 pt-6"><h2 className="text-sm font-semibold text-navy-950">Состояние служб</h2><dl className="mt-4 space-y-3 text-sm"><Row label="Локальный сервер" value={health?.ok ? "Запущен" : health ? "Не отвечает" : "Проверяем…"} /><Row label="Локальная модель" value={health?.ai ? `${health.model} · готова` : health ? "Ollama не запущен или модель загружается" : "Проверяем…"} /><Row label="Лимит помощника" value={health ? `${health.limit} запросов в месяц` : "—"} /><Row label="Telegram" value={botUsername ? `${botName} · @${botUsername}` : "Бот ещё не подключён"} /></dl>{health && !health.ai && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">Проверь, что Ollama запущен и установленная модель {health.model || "qwen3:4b"} готова. ИИ нужен только помощнику конструктора.</p>}</section><section className="mt-7 border-t border-gray-100 pt-6"><h2 className="text-sm font-semibold text-navy-950">Хранение токена</h2><p className="mt-2 max-w-2xl text-xs leading-5 text-gray-500">Токен хранится зашифрованным AES-256-GCM в локальной папке .data. Ключ шифрования создаётся на этом компьютере и также хранится в .data/token-encryption.key. Не отправляй папку .data и не публикуй её резервную копию вместе с ключом. Не удаляй ключ: без него сохранённый токен нельзя восстановить.</p></section><section className="mt-7 border-t border-gray-100 pt-6"><h2 className="text-sm font-semibold text-navy-950">Черновик конструктора</h2><p className="mt-2 max-w-2xl text-xs leading-5 text-gray-500">Описание бизнеса и каталог сохранены только в этом браузере. Конфигурация работающего бота сохранена локальным сервером.</p><button onClick={() => { localStorage.removeItem("bots-kz-workspace-v1"); window.location.reload(); }} className="mt-4 rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Удалить черновик из браузера</button></section></div></div>;
 }
+
+function Row({ label, value }) { return <div className="flex flex-col justify-between gap-1 sm:flex-row"><dt className="text-gray-500">{label}</dt><dd className="font-medium text-navy-950">{value}</dd></div>; }
