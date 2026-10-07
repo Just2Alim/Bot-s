@@ -451,7 +451,11 @@ async function startBot(record) {
     const stateKey = workflowStateKey(bot, ctx.chat.id);
     const pending = conversationState.get(stateKey);
     const pendingNode = pending?.kind === "document" && workflow.nodes.find((node) => node.id === pending.nodeId && node.data.kind === "document");
-    await saveInboxMessage(record, ctx, telegramMessageSummary(ctx));
+    const savedMessage = await saveInboxMessage(record, ctx, telegramMessageSummary(ctx));
+    if (!savedMessage) {
+      await ctx.reply("Не получилось сохранить файл во входящих. Пожалуйста, отправьте его ещё раз чуть позже.");
+      return;
+    }
     if (!pendingNode) {
       await ctx.reply("Получил файл. Владелец сможет просмотреть его и ответить вам в чате.");
       return;

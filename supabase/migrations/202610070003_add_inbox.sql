@@ -81,7 +81,7 @@ begin
   insert into public.inbox_conversations as c(owner_id, bot_id, telegram_chat_id, telegram_user_id, username, display_name, last_message_at)
   select b.owner_id, b.id, p_chat_id, p_user_id, p_username, coalesce(nullif(p_display_name, ''), 'Пользователь Telegram'), now()
   from public.bots b where b.id = p_bot_id
-  on conflict (bot_id, telegram_chat_id) do update set telegram_user_id = excluded.telegram_user_id, username = excluded.username, display_name = excluded.display_name, last_message_at = now()
+  on conflict on constraint inbox_conversations_bot_id_telegram_chat_id_key do update set telegram_user_id = excluded.telegram_user_id, username = excluded.username, display_name = excluded.display_name, last_message_at = now()
   returning c.id, c.owner_id, c.bot_id;
 end;
 $$;
