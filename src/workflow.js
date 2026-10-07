@@ -6,7 +6,7 @@ export const nodeKinds = {
   document: { title: "Приём документов", icon: "📎", color: "border-blue-400" },
   booking: { title: "Заявка / запись", icon: "📝", color: "border-pink-300" },
   question: { title: "Спросить / собрать данные", icon: "❓", color: "border-orange-300" },
-  condition: { title: "Проверка условия", icon: "◇", color: "border-fuchsia-300" },
+  condition: { title: "Развилка / выбор варианта", icon: "◇", color: "border-fuchsia-300" },
   delay: { title: "Пауза и ожидание", icon: "◷", color: "border-sky-300" },
   notification: { title: "Уведомить владельца", icon: "🔔", color: "border-rose-300" },
   link: { title: "Открыть ссылку", icon: "↗", color: "border-teal-300" },

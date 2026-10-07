@@ -7,7 +7,7 @@ import { apiFetch } from "../lib/api.js";
 
 export default function CreateBotLaunch() {
   const navigate = useNavigate();
-  const { botId, botUsername, category, templates, features, items, contacts, ownerTelegramId, description, businessName, greeting, status, setField } = useCreateBot();
+  const { botId, botUsername, category, templates, features, items, contacts, ownerTelegramId, description, businessName, greeting, status, workflow, setField } = useCreateBot();
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
 
@@ -18,7 +18,9 @@ export default function CreateBotLaunch() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) throw new Error("Сессия Supabase истекла. Войдите заново.");
-      const config = { businessName, template: templates[category]?.label || "Своя структура", description, greeting, features, items, contacts, ownerTelegramId };
+      // The visual editor stores the graph in the shared creation context. Include
+      // it in the launch request or the server will start its default scenario.
+      const config = { businessName, template: templates[category]?.label || "Своя структура", description, greeting, features, items, contacts, ownerTelegramId, workflow };
       const response = await apiFetch(`/api/bots/${botId}/launch`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session.access_token}` }, body: JSON.stringify(config) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Не удалось запустить бота.");

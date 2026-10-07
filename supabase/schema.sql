@@ -120,6 +120,10 @@ declare
   current_count integer;
 begin
   if auth.uid() is null then raise exception 'authentication required'; end if;
+  -- p_limit is caller supplied, so cap it here as well as in the application.
+  if p_limit is null or p_limit < 1 or p_limit > 20 then
+    raise exception 'invalid AI request limit';
+  end if;
   insert into public.ai_usage(owner_id, month, requests) values (auth.uid(), current_month, 0)
     on conflict on constraint ai_usage_pkey do nothing;
   select usage.requests into current_count from public.ai_usage as usage
@@ -136,7 +140,8 @@ $$;
 revoke all on function public.consume_ai_request(integer) from public, anon;
 grant execute on function public.consume_ai_request(integer) to authenticated;
 
-create or replace function public.refund_ai_request()
+drop function if exists public.refund_ai_request();
+create or replace function public.refund_ai_request(p_owner_id uuid, p_month date)
 returns void
 language sql
 security definer
@@ -144,8 +149,8 @@ set search_path = public
 as $$
   update public.ai_usage as usage
   set requests = greatest(usage.requests - 1, 0)
-  where usage.owner_id = auth.uid()
-    and usage.month = date_trunc('month', now())::date;
+  where usage.owner_id = p_owner_id
+    and usage.month = p_month;
 $$;
-revoke all on function public.refund_ai_request() from public, anon;
-grant execute on function public.refund_ai_request() to authenticated;
+revoke all on function public.refund_ai_request(uuid, date) from public, anon, authenticated;
+grant execute on function public.refund_ai_request(uuid, date) to service_role;

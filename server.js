@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
-import { readFileSync, mkdirSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
+import { dirname, join, resolve, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
 import { Bot, InlineKeyboard, Keyboard } from "grammy";
@@ -12,9 +12,11 @@ const root = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: join(root, ".env") });
 const dataDir = join(root, ".data");
 const keyPath = join(dataDir, "token-encryption.key");
+const conversationStatePath = join(dataDir, "conversation-state.json");
 mkdirSync(dataDir, { recursive: true });
 const running = new Map();
 const PORT = Number(process.env.BOTSUITE_PORT || 4174);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MODEL = process.env.OLLAMA_MODEL || "qwen3:4b";
 const MONTHLY_AI_LIMIT = 20;
 const BOT_PLAN_SCHEMA = {
@@ -88,15 +90,25 @@ function response(res, status, body) {
 }
 function serveStatic(pathname, res) {
   const routes = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff2": "font/woff2" };
-  let file = join(root, "dist", decodeURIComponent(pathname).replace(/^\/+/, ""));
-  if (!existsSync(file) || !file.startsWith(join(root, "dist"))) file = join(root, "dist", "index.html");
+  const distRoot = resolve(root, "dist");
+  let file;
+  try { file = resolve(distRoot, decodeURIComponent(pathname).replace(/^\/+/, "")); }
+  catch { file = resolve(distRoot, "index.html"); }
+  const pathFromDist = relative(distRoot, file);
+  if (pathFromDist === ".." || pathFromDist.startsWith(`..${sep}`) || !existsSync(file)) file = resolve(distRoot, "index.html");
   const extension = file.slice(file.lastIndexOf("."));
   res.writeHead(200, { "Content-Type": routes[extension] || "application/octet-stream", "X-Content-Type-Options": "nosniff" });
   createReadStream(file).pipe(res);
 }
 async function bodyOf(req) {
-  let raw = "";
-  for await (const chunk of req) { raw += chunk; if (raw.length > 1024 * 1024) throw new Error("Request too large"); }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 1024 * 1024) throw new Error("Request too large");
+    chunks.push(chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
   return raw ? JSON.parse(raw) : {};
 }
 function localRequest(req) {
@@ -170,13 +182,26 @@ async function askLocalAI(prompt, config, mode = "customer", format = undefined,
 function configOf(data, existing = {}) {
   const workflow = Array.isArray(data.workflow?.nodes) && Array.isArray(data.workflow?.edges) ? data.workflow : existing.workflow || createDefaultWorkflow();
   const safeUrl = (value) => { try { const url = new URL(String(value || "")); return url.protocol === "https:" ? url.toString().slice(0, 1000) : ""; } catch { return ""; } };
-  const nodes = workflow.nodes.slice(0, 100).filter((node) => node && typeof node.id === "string" && nodeKinds[node.data?.kind]).map((node) => ({ id: node.id.slice(0, 80), type: "workflow", position: { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }, data: { kind: node.data.kind, title: String(node.data.title || nodeKinds[node.data.kind].title).slice(0, 100), text: String(node.data.text || "").slice(0, 1500), buttonLabel: String(node.data.buttonLabel || "").slice(0, 60), keywords: String(node.data.keywords || "").slice(0, 300), url: safeUrl(node.data.url), condition: String(node.data.condition || "").slice(0, 300) } }));
+  const nodes = workflow.nodes.slice(0, 100).filter((node) => node && typeof node.id === "string" && nodeKinds[node.data?.kind]).map((node) => ({ id: node.id.slice(0, 80), type: "workflow", position: { x: Number(node.position?.x) || 0, y: Number(node.position?.y) || 0 }, data: { kind: node.data.kind, title: String(node.data.title || nodeKinds[node.data.kind].title).slice(0, 100), text: String(node.data.text || "").slice(0, 1500), buttonLabel: String(node.data.buttonLabel || "").slice(0, 60), keywords: String(node.data.keywords || "").slice(0, 300), url: safeUrl(node.data.url), condition: String(node.data.condition || "").slice(0, 300), delaySeconds: Math.max(0, Math.min(300, Math.floor(Number(node.data.delaySeconds) || 0))) } }));
   const ids = new Set(nodes.map((node) => node.id));
   const edges = workflow.edges.slice(0, 200).filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ id: String(edge.id || randomBytes(5).toString("hex")).slice(0, 100), source: edge.source, target: edge.target, label: String(edge.label || "").slice(0, 50) }));
   return { ...existing, ...data, botName: existing.botName, ownerTelegramId: String(data.ownerTelegramId ?? existing.ownerTelegramId ?? "").replace(/[^0-9-]/g, "").slice(0, 20), businessName: String(data.businessName || "").slice(0, 120), template: String(data.template || "").slice(0, 100), description: String(data.description || "").slice(0, 5000), greeting: String(data.greeting || "").slice(0, 1000), features: Array.isArray(data.features) ? data.features.slice(0, 30).map((item) => String(item).slice(0, 100)) : existing.features || [], items: Array.isArray(data.items) ? data.items.slice(0, 100).map((item) => ({ name: String(item.name || "").slice(0, 200), price: Math.max(0, Number(item.price) || 0) })) : existing.items || [], contacts: { address: String(data.contacts?.address ?? existing.contacts?.address ?? "").slice(0, 300), hours: String(data.contacts?.hours ?? existing.contacts?.hours ?? "").slice(0, 200), phone: String(data.contacts?.phone ?? existing.contacts?.phone ?? "").slice(0, 50), language: String(data.contacts?.language ?? existing.contacts?.language ?? "Русский и казахский").slice(0, 100) }, workflow: { nodes, edges } };
 }
 
 const conversationState = new Map();
+try {
+  const savedStates = JSON.parse(readFileSync(conversationStatePath, "utf8"));
+  for (const [key, value] of Object.entries(savedStates)) if (value?.nodeId && value?.kind && Date.now() - value.updatedAt < 24 * 60 * 60 * 1000) conversationState.set(key, value);
+} catch { /* State is optional on first run or after an interrupted write. */ }
+function persistConversationState() {
+  for (const [key, value] of conversationState) if (Date.now() - value.updatedAt >= 24 * 60 * 60 * 1000) conversationState.delete(key);
+  while (conversationState.size > 10_000) conversationState.delete(conversationState.keys().next().value);
+  const temporaryPath = `${conversationStatePath}.tmp`;
+  writeFileSync(temporaryPath, JSON.stringify(Object.fromEntries(conversationState)), { mode: 0o600 });
+  renameSync(temporaryPath, conversationStatePath);
+}
+function setConversationState(key, value) { conversationState.set(key, { ...value, updatedAt: Date.now() }); persistConversationState(); }
+function clearConversationState(key) { if (conversationState.delete(key)) persistConversationState(); }
 function workflowStateKey(bot, chatId) { return `${bot.botInfo?.id || "bot"}:${chatId}`; }
 
 async function executeFlow(bot, ctx, record, startId, depth = 0) {
@@ -201,7 +226,7 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       outgoing.forEach((edge, index) => {
         const target = workflow.nodes.find((node) => node.id === edge.target);
         if (target) {
-          keyboard.text(target.data.buttonLabel || target.data.title || nodeKinds[target.data.kind].title, `flow:${target.id}`);
+          keyboard.text(edge.label || target.data.buttonLabel || target.data.title || nodeKinds[target.data.kind].title, `flow:${target.id}`);
           if (index % 2 === 1) keyboard.row();
         }
       });
@@ -221,8 +246,8 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       break;
     }
     case "booking":
-      await ctx.reply(current.data.text || `Чтобы оставить заявку, свяжитесь с нами${config.contacts?.phone ? ` по телефону ${config.contacts.phone}` : " по контактам из меню"}.`);
-      await next();
+      await ctx.reply(current.data.text || "Напишите, пожалуйста, что вас интересует и как с вами связаться.");
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "booking", nodeId: current.id });
       break;
     case "handoff":
       if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
@@ -239,14 +264,15 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
     }
     case "feedback":
       await ctx.reply(current.data.text || "Оцените наш сервис от 1 до 5 и напишите комментарий.");
-      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "feedback", nodeId: current.id });
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "feedback", nodeId: current.id });
       break;
     case "subscribe":
       await ctx.reply(current.data.text || "Чтобы подписаться на новости, напишите «Подписаться».");
-      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "subscribe", nodeId: current.id });
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "subscribe", nodeId: current.id });
       break;
     case "document":
       await ctx.reply(current.data.text || "Пришлите документ или изображение сообщением — я передам его владельцу.");
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "document", nodeId: current.id });
       break;
     case "fallback":
       await ctx.reply(current.data.text || "Не понял запрос. Выберите пункт меню или напишите по контакту из раздела «Контакты».");
@@ -257,16 +283,19 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       break;
     case "question":
       await ctx.reply(current.data.text || "Напишите ответ сообщением, чтобы продолжить.");
-      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "question", nodeId: current.id });
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "question", nodeId: current.id });
       break;
     case "condition":
       await ctx.reply(current.data.text || "Для продолжения выберите подходящий вариант:");
       if (outgoing.length) { const keyboard = new InlineKeyboard(); outgoing.slice(0, 8).forEach((edge) => { const target = workflow.nodes.find((node) => node.id === edge.target); if (target) keyboard.text(edge.label || target.data.buttonLabel || target.data.title, `flow:${target.id}`).row(); }); await ctx.reply("Выберите вариант:", { reply_markup: keyboard }); }
       break;
-    case "delay":
-      await ctx.reply(current.data.text || "Хорошо. Продолжим по следующему шагу сценария.");
+    case "delay": {
+      const seconds = Math.max(0, Math.min(300, Math.floor(Number(current.data.delaySeconds) || 0)));
+      if (seconds) await new Promise((resolvePromise) => setTimeout(resolvePromise, seconds * 1000));
+      await ctx.reply(current.data.text || (seconds ? `Пауза ${seconds} сек. завершена.` : "Продолжаем сценарий."));
       await next();
       break;
+    }
     case "notification":
       if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
         await ctx.api.sendMessage(config.ownerTelegramId, `${current.data.text || "Новое уведомление"}\nОт: ${ctx.from?.first_name || "Пользователь"}${ctx.from?.username ? ` (@${ctx.from.username})` : ""}\nID: ${ctx.chat.id}`);
@@ -281,7 +310,7 @@ async function executeFlow(bot, ctx, record, startId, depth = 0) {
       break;
     case "location":
       await ctx.reply(current.data.text || "Поделитесь геолокацией или напишите адрес текстом.", { reply_markup: new Keyboard().requestLocation("📍 Отправить геолокацию").resized().oneTime() });
-      conversationState.set(workflowStateKey(bot, ctx.chat.id), { kind: "location", nodeId: current.id });
+      setConversationState(workflowStateKey(bot, ctx.chat.id), { kind: "location", nodeId: current.id });
       break;
     default:
       break;
@@ -311,7 +340,7 @@ async function startBot(record) {
     const stateKey = workflowStateKey(bot, ctx.chat.id);
     const pending = conversationState.get(stateKey);
     if (pending) {
-      conversationState.delete(stateKey);
+      clearConversationState(stateKey);
       const pendingNode = workflow.nodes.find((node) => node.id === pending.nodeId);
       if (pending.kind === "subscribe") {
         const subscribed = /^(да|подписаться|хочу|yes|иә)$/i.test(text);
@@ -326,9 +355,14 @@ async function startBot(record) {
         if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
         return;
       }
-      if (pendingNode && ["question", "feedback"].includes(pending.kind)) {
+      if (pending.kind === "document") {
+        await ctx.reply("Пришлите документ или изображение, чтобы я передал его владельцу.");
+        setConversationState(stateKey, pending);
+        return;
+      }
+      if (pendingNode && ["question", "feedback", "booking"].includes(pending.kind)) {
         if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) await ctx.api.sendMessage(config.ownerTelegramId, `Новое ${pending.kind === "feedback" ? "сообщение/отзыв" : "обращение"} в @${record.username || "бота"}.\nОт: ${ctx.from?.first_name || "Пользователь"}${ctx.from?.username ? ` (@${ctx.from.username})` : ""}\nID: ${ctx.chat.id}\n\n${text.slice(0, 3500)}`);
-        await ctx.reply(pending.kind === "feedback" ? "Спасибо за обратную связь!" : "Спасибо! Ваш ответ записан, владелец свяжется с вами.");
+        await ctx.reply(pending.kind === "feedback" ? "Спасибо за обратную связь!" : "Спасибо! Передал вашу заявку владельцу.");
         const outgoing = workflow.edges.filter((edge) => edge.source === pending.nodeId);
         if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
         return;
@@ -344,7 +378,7 @@ async function startBot(record) {
     const stateKey = workflowStateKey(bot, ctx.chat.id);
     const pending = conversationState.get(stateKey);
     if (!pending || pending.kind !== "location") return;
-    conversationState.delete(stateKey);
+    clearConversationState(stateKey);
     const location = ctx.message.location;
     if (config.ownerTelegramId && /^\d{5,20}$/.test(String(config.ownerTelegramId))) {
       await ctx.api.sendLocation(config.ownerTelegramId, location.latitude, location.longitude);
@@ -357,7 +391,10 @@ async function startBot(record) {
   });
   bot.on(["message:document", "message:photo"], async (ctx) => {
     const workflow = record.config.workflow || createDefaultWorkflow();
-    if (!workflow.nodes.some((node) => node.data.kind === "document")) return;
+    const stateKey = workflowStateKey(bot, ctx.chat.id);
+    const pending = conversationState.get(stateKey);
+    const pendingNode = pending?.kind === "document" && workflow.nodes.find((node) => node.id === pending.nodeId && node.data.kind === "document");
+    if (!pendingNode) return;
     const ownerId = String(record.config.ownerTelegramId || "");
     if (!/^\d{5,20}$/.test(ownerId)) {
       await ctx.reply("Приём файлов ещё не настроен. Владелец должен отправить /myid этому боту, а затем указать полученный ID в настройках сценария.");
@@ -369,22 +406,34 @@ async function startBot(record) {
       const sender = [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || "Пользователь Telegram";
       await ctx.api.sendMessage(ownerId, `Новый файл от ${sender}${ctx.from?.username ? ` (@${ctx.from.username})` : ""} в боте @${record.username || "bot"}.`);
       await ctx.reply("Файл передан владельцу. Спасибо!");
+      clearConversationState(stateKey);
+      const outgoing = workflow.edges.filter((edge) => edge.source === pending.nodeId);
+      if (outgoing.length === 1) await executeFlow(bot, ctx, record, outgoing[0].target);
     } catch (error) {
       console.error(`Could not forward Telegram document (${record.username || record.id}):`, error.message);
       await ctx.reply("Не получилось доставить файл владельцу. Попробуйте ещё раз позже.");
     }
   });
   bot.catch((error) => console.error(`Telegram bot error (${record.username || record.id}):`, error.error?.message || error.message));
-  const loop = bot.start({ onStart: () => console.log(`Telegram bot @${record.username} is running`) });
+  let resolveReady;
+  let rejectReady;
+  const ready = new Promise((resolvePromise, rejectPromise) => { resolveReady = resolvePromise; rejectReady = rejectPromise; });
+  const loop = bot.start({ onStart: () => { console.log(`Telegram bot @${record.username} is running`); resolveReady(); } });
   running.set(record.id, { bot, loop });
-  loop.catch((error) => { console.error(`Telegram polling stopped (${record.username || record.id}):`, error.message); running.delete(record.id); });
+  loop.catch((error) => {
+    rejectReady(error);
+    console.error(`Telegram polling stopped (${record.username || record.id}):`, error.message);
+    running.delete(record.id);
+    void serviceRpc("update_bot_runner_state", { p_bot_id: record.id, p_status: "Ошибка запуска" }).catch((stateError) => console.error("Could not update Telegram bot status:", stateError.message));
+  });
+  await ready;
 }
 
 const server = createServer(async (req, res) => {
   if (!localRequest(req)) return response(res, 403, { error: "Origin is not allowed." });
   applyCors(req, res);
-  const url = new URL(req.url || "/", `http://${req.headers.host}`);
   try {
+    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     if (req.method === "OPTIONS" && url.pathname.startsWith("/api/")) { res.writeHead(204); return res.end(); }
     if (!url.pathname.startsWith("/api/")) {
       if (existsSync(join(root, "dist", "index.html"))) return serveStatic(url.pathname, res);
@@ -399,8 +448,9 @@ const server = createServer(async (req, res) => {
       const rows = await restCall(user, "bots", { query: `?select=id,owner_id,telegram_id,username,bot_name,status,config&owner_id=eq.${user.id}&order=created_at.desc` });
       return response(res, 200, { bots: rows.map((row) => ({ id: row.id, telegramId: row.telegram_id, username: row.username, botName: row.bot_name, status: row.status, config: row.config || {} })) });
     }
-    const botMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]+)$/);
+    const botMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]+)$/i);
     if (req.method === "GET" && botMatch) {
+      if (!UUID_PATTERN.test(botMatch[1])) return response(res, 404, { error: "Бот не найден." });
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Войдите через Supabase." });
       const bot = await getOwnedBot(user, botMatch[1]);
       if (!bot) return response(res, 404, { error: "Бот не найден." });
@@ -422,7 +472,8 @@ const server = createServer(async (req, res) => {
       const record = { id: saved.id, telegramId: saved.telegram_id, username: saved.username, botName: saved.bot_name, status: saved.status, config: saved.config || {} };
       return response(res, 200, { bot: { id: record.id, telegramId: record.telegramId, username: record.username, botName: record.botName, status: record.status } });
     }
-    const launchBotId = botLaunchIdFromPath(url.pathname);
+    const candidateLaunchId = botLaunchIdFromPath(url.pathname);
+    const launchBotId = candidateLaunchId && UUID_PATTERN.test(candidateLaunchId) ? candidateLaunchId : null;
     if (req.method === "POST" && launchBotId) {
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Нужна действующая сессия Supabase." });
       const record = await getOwnedBot(user, launchBotId);
@@ -433,27 +484,55 @@ const server = createServer(async (req, res) => {
       record.config = configOf(data, record.config);
       await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { config: record.config, status: "Запускается", updated_at: new Date().toISOString() } });
       try {
-        await fetch(`https://api.telegram.org/bot${decrypt(record.encryptedToken)}/setMyCommands`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ commands: [{ command: "start", description: "Открыть меню" }, { command: "help", description: "Помощь" }] }) });
+        const commandResponse = await fetch(`https://api.telegram.org/bot${decrypt(record.encryptedToken)}/setMyCommands`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ commands: [{ command: "start", description: "Открыть меню" }, { command: "help", description: "Помощь" }] }), signal: AbortSignal.timeout(15_000) });
+        const commandResult = await commandResponse.json();
+        if (!commandResponse.ok || !commandResult.ok) throw new Error(commandResult.description || "Telegram не принял список команд.");
         await startBot(record);
         record.status = "Работает на сервере платформы";
         await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status, updated_at: new Date().toISOString() } });
         return response(res, 200, { bot: safeBot(record) });
-      } catch (error) { record.status = "Ошибка запуска"; try { await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status } }); } catch { /* Preserve original launch error. */ } return response(res, 502, { error: error.message }); }
+      } catch { record.status = "Ошибка запуска"; try { await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status } }); } catch { /* Preserve original launch error. */ } return response(res, 502, { error: "Не удалось запустить бота. Проверьте токен и журнал сервера." }); }
     }
-    const editMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]{36})\/config$/i);
+    const editMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/config$/i);
     if (req.method === "PUT" && editMatch) {
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Нужна действующая сессия Supabase." });
       const record = await getOwnedBot(user, editMatch[1]);
       if (!record) return response(res, 404, { error: "Бот не найден." });
       // A previous server restart may have cleared the in-memory bot while Supabase still says it was running.
       const wasRunning = running.has(record.id) || record.status === "Работает на сервере платформы";
-      if (wasRunning) { await running.get(record.id).bot.stop(); running.delete(record.id); }
-      record.config = configOf(await bodyOf(req), record.config);
-      await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { config: record.config, updated_at: new Date().toISOString() } });
-      if (wasRunning) { await startBot(record); record.status = "Работает на сервере платформы"; await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status, updated_at: new Date().toISOString() } }); }
+      const previousConfig = record.config;
+      const nextConfig = configOf(await bodyOf(req), previousConfig);
+      // Persist first. A failed database write must never stop the currently working bot.
+      await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { config: nextConfig, updated_at: new Date().toISOString() } });
+      const previousInstance = running.get(record.id);
+      if (previousInstance) { await previousInstance.bot.stop(); running.delete(record.id); }
+      record.config = nextConfig;
+      if (wasRunning) {
+        try {
+          await startBot(record);
+          record.status = "Работает на сервере платформы";
+          await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status, updated_at: new Date().toISOString() } });
+        } catch {
+          const failedInstance = running.get(record.id);
+          if (failedInstance) { try { await failedInstance.bot.stop(); } catch { /* Continue restoring the old scenario. */ } running.delete(record.id); }
+          record.config = previousConfig;
+          record.status = "Ошибка запуска";
+          try {
+            await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { config: previousConfig, status: record.status, updated_at: new Date().toISOString() } });
+            await startBot(record);
+            record.status = "Работает на сервере платформы";
+            await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status, updated_at: new Date().toISOString() } });
+          } catch (rollbackError) {
+            console.error(`Could not restore previous bot config (${record.username || record.id}):`, rollbackError.message);
+            record.status = "Ошибка запуска";
+            try { await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status } }); } catch { /* Preserve the launch failure. */ }
+          }
+          return response(res, 502, { error: record.status === "Работает на сервере платформы" ? "Новая схема не запустилась, восстановил предыдущую рабочую версию." : "Не удалось применить изменения, а предыдущий сценарий не удалось автоматически запустить. Повторно запустите бота." });
+        }
+      }
       return response(res, 200, { bot: safeBot(record) });
     }
-    const stopMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]{36})\/stop$/i);
+    const stopMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/stop$/i);
     if (req.method === "POST" && stopMatch) {
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Нужна действующая сессия Supabase." });
       const record = await getOwnedBot(user, stopMatch[1]);
@@ -469,6 +548,7 @@ const server = createServer(async (req, res) => {
       const description = String(data.description || "").trim();
       if (isGenerate && (!description || description.length > 5000)) return response(res, 400, { error: "Опиши бизнес (до 5000 символов), чтобы собрать персональный черновик." });
       if (!isGenerate && (!question || question.length > 2000)) return response(res, 400, { error: "Напишите вопрос длиной до 2000 символов." });
+      if (isWorkflow && (!Array.isArray(data.workflow?.nodes) || !data.workflow.nodes.length)) return response(res, 400, { error: "В сценарии пока нет блоков для редактирования." });
       let aiReady = false; try { if (process.env.OLLAMA_URL) { const r = await fetch(`${process.env.OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(1500) }); aiReady = r.ok; } } catch { /* Return the server setup hint below when inference is offline. */ }
       if (!aiReady) return response(res, 503, { error: `ИИ на сервере сейчас не настроен. Требуется доступная модель ${MODEL}.` });
       const usageRows = await restCall(user, "rpc/consume_ai_request", { method: "POST", body: { p_limit: MONTHLY_AI_LIMIT } });
@@ -479,7 +559,6 @@ const server = createServer(async (req, res) => {
           const supplied = data.workflow || {};
           const currentNodes = Array.isArray(supplied.nodes) ? supplied.nodes.slice(0, 100) : [];
           const currentEdges = Array.isArray(supplied.edges) ? supplied.edges.slice(0, 200) : [];
-          if (!currentNodes.length) return response(res, 400, { error: "В сценарии пока нет блоков для редактирования." });
           const nodeSummary = currentNodes.map((node) => ({ id: node.id, kind: node.data?.kind, title: node.data?.title, text: String(node.data?.text || "").slice(0, 140), buttonLabel: node.data?.buttonLabel || "", keywords: node.data?.keywords || "" }));
           const wantsDocuments = /документ|файл|вложен|скан/i.test(question);
           const ownerTelegramId = String(data.context?.ownerTelegramId || "");
@@ -546,7 +625,7 @@ const server = createServer(async (req, res) => {
         return response(res, 200, { answer, used: usage.requests, limit: MONTHLY_AI_LIMIT, local: false });
       }
       catch (error) {
-        try { await restCall(user, "rpc/refund_ai_request", { method: "POST", body: {} }); }
+        try { await serviceRpc("refund_ai_request", { p_owner_id: user.id, p_month: usage.month }); }
         catch (refundError) { console.error("Could not refund failed AI request:", refundError.message); }
         if (error.name === "TimeoutError" || error.name === "AbortError") return response(res, 504, { error: "Локальная модель отвечает слишком долго. Попробуйте ещё раз с более коротким запросом." });
         return response(res, 503, { error: error.message });
