@@ -15,7 +15,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/server.js ./server.js
-COPY --from=build /app/src/workflow.js ./src/workflow.js
+COPY --from=build /app/src ./src
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /app/.data && chown -R node:node /app
 USER node
