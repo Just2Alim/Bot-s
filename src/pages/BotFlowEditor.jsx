@@ -31,6 +31,9 @@ export default function BotFlowEditor() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiMessages, setAiMessages] = useState([]);
+  const [aiBusy, setAiBusy] = useState(false);
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const kinds = useMemo(() => Object.entries(nodeKinds), []);
 
@@ -75,6 +78,26 @@ export default function BotFlowEditor() {
     setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, [field]: value } } : node));
   }
 
+  async function askAI(event) {
+    event.preventDefault();
+    const question = aiPrompt.trim();
+    if (!question || aiBusy) return;
+    setAiPrompt(""); setAiBusy(true); setError("");
+    setAiMessages((current) => [...current, { role: "user", text: question }]);
+    try {
+      if (!supabase) throw new Error(supabaseSetupError());
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) throw new Error("Сессия Supabase истекла. Войдите заново.");
+      const response = await apiFetch("/api/ai/workflow", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${authData.session.access_token}` }, body: JSON.stringify({ question, workflow: { nodes, edges }, context: { description, businessName, template: templates[category]?.label } }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "ИИ не смог изменить сценарий.");
+      setNodes(result.workflow.nodes); setEdges(result.workflow.edges); setSelectedId(null);
+      setAiMessages((current) => [...current, { role: "assistant", text: `${result.answer} Изменения уже применены к схеме — проверь её и нажми «Сохранить сценарий». Лимит: ${result.used}/${result.limit}.` }]);
+    } catch (exception) {
+      setAiMessages((current) => [...current, { role: "assistant", text: `Не получилось изменить сценарий: ${exception.message}` }]);
+    } finally { setAiBusy(false); }
+  }
+
   async function save() {
     setSaving(true); setError(""); setSaved(false);
       const config = { businessName, template: templates[category]?.label, description, greeting, features, items, contacts, workflow: { nodes, edges } };
@@ -100,9 +123,18 @@ export default function BotFlowEditor() {
       <div className="flex gap-2"><button onClick={() => navigate(editing ? "/bots" : "/create/structure")} className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">Назад</button><button onClick={save} disabled={saving} className="rounded-xl bg-navy-950 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Сохраняю…" : editing ? "Сохранить изменения" : "Сохранить сценарий →"}</button></div>
     </div>
     <div className="mb-3 flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-white p-2">{kinds.filter(([kind]) => kind !== "start").map(([kind, value]) => <button key={kind} onClick={() => addNode(kind)} className="rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-violet-50 hover:text-violet-800">+ {value.icon} {value.title}</button>)}</div>
-    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(520px,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(520px,1fr)_360px]">
       <div className="h-[620px] overflow-hidden rounded-2xl border border-gray-200 bg-slate-50 shadow-sm"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onSelectionChange={({ nodes: selected }) => setSelectedId(selected[0]?.id || null)} fitView fitViewOptions={{ padding: 0.2 }} deleteKeyCode={["Backspace", "Delete"]}><Background color="#cbd5e1" gap={22} /><MiniMap pannable zoomable /><Controls /></ReactFlow></div>
       <aside className="max-h-[620px] space-y-4 overflow-y-auto rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+        <section className="rounded-xl border border-violet-100 bg-violet-50/60 p-3">
+          <div className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-100 text-violet-700">✦</span><div><h2 className="text-sm font-bold text-navy-950">ИИ-конструктор сценария</h2><p className="text-[10px] text-gray-500">ИИ изменяет схему, бот отвечает по ней</p></div></div>
+          <div aria-live="polite" className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+            {aiMessages.length === 0 && <p className="rounded-lg bg-white p-2.5 text-xs leading-5 text-gray-600">Напиши, что нужно построить: «Добавь запись на услугу: спроси дату и телефон, затем покажи контакты».</p>}
+            {aiMessages.map((message, index) => <p key={index} className={`whitespace-pre-line rounded-lg p-2.5 text-xs leading-5 ${message.role === "user" ? "ml-5 bg-violet-100 text-violet-950" : "mr-3 bg-white text-gray-700"}`}>{message.text}</p>)}
+            {aiBusy && <p className="text-xs text-gray-500">ИИ обновляет узлы и связи…</p>}
+          </div>
+          <form onSubmit={askAI} className="mt-3 space-y-2"><textarea aria-label="Попросить ИИ изменить сценарий" rows={3} maxLength={2000} value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder="Опиши изменение сценария…" className="w-full resize-y rounded-lg border border-violet-100 bg-white px-3 py-2 text-xs leading-5 outline-none focus:border-violet-400" /><button type="submit" disabled={aiBusy || !aiPrompt.trim()} className="w-full rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{aiBusy ? "Изменяю сценарий…" : "Применить к схеме"}</button></form>
+        </section>
         {selectedNode ? <section><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-navy-950">{nodeKinds[selectedNode.data.kind]?.icon} Настройки блока</h2><button onClick={() => { setNodes((current) => current.filter((node) => node.id !== selectedId)); setEdges((current) => current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId)); setSelectedId(null); }} disabled={selectedNode.data.kind === "start"} className="text-xs text-red-600 disabled:opacity-30">Удалить</button></div><Field label="Название блока" value={selectedNode.data.title || ""} onChange={(value) => updateSelected("title", value)} />{["message", "fallback", "booking", "question", "condition", "delay", "notification", "link", "location"].includes(selectedNode.data.kind) && <Field label="Текст сообщения" multiline value={selectedNode.data.text || ""} onChange={(value) => updateSelected("text", value)} />}{selectedNode.data.kind === "menu" && <p className="mt-3 text-xs leading-5 text-gray-500">Подключи к этому блоку другие узлы. Каждый выход станет кнопкой в меню бота.</p>}{["catalog", "contacts"].includes(selectedNode.data.kind) && <p className="mt-3 text-xs leading-5 text-gray-500">Блок покажет каталог или контакты, которые указаны в настройках бизнеса ниже.</p>}{selectedNode.data.kind === "keyword" && <Field label="Ключевые слова через запятую" value={selectedNode.data.keywords || ""} onChange={(value) => updateSelected("keywords", value)} />}{selectedNode.data.kind !== "start" && <Field label="Текст кнопки" value={selectedNode.data.buttonLabel || ""} onChange={(value) => updateSelected("buttonLabel", value)} />}</section> : <section><h2 className="text-sm font-bold text-navy-950">Как пользоваться схемой</h2><p className="mt-2 text-xs leading-5 text-gray-500">Перетаскивай узлы по полотну. Потяни за кружок справа у блока, чтобы соединить его с кружком слева у следующего. Нажми на блок для его настройки.</p></section>}
         <section className="border-t border-gray-100 pt-4"><h2 className="text-sm font-bold text-navy-950">Данные бизнеса</h2><Field label="Название" value={businessName} onChange={(value) => setField("businessName", value)} /><Field label="Приветствие /start" multiline value={greeting} onChange={(value) => setField("greeting", value)} /><Field label="Адрес" value={contacts.address} onChange={(value) => setContact("address", value)} /><Field label="График" value={contacts.hours} onChange={(value) => setContact("hours", value)} /><Field label="Телефон" value={contacts.phone} onChange={(value) => setContact("phone", value)} /></section>
         <section className="border-t border-gray-100 pt-4"><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-navy-950">Товары / услуги · ₸</h2><button onClick={addItem} className="text-xs font-semibold text-accent-600">+ Добавить</button></div>{items.map((item, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_76px_24px] items-center gap-1"><input aria-label="Название товара" value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} className="min-w-0 rounded-lg border border-gray-200 px-2 py-2 text-xs" /><input aria-label="Цена в тенге" type="number" min="0" value={item.price} onChange={(event) => updateItem(index, "price", Number(event.target.value))} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs" /><button aria-label="Удалить позицию" onClick={() => removeItem(index)} className="text-lg text-red-500">×</button></div>)}<p className="mt-2 text-[11px] leading-4 text-amber-700">Проверь цены: шаблонные позиции — примеры, а не цены твоей компании.</p></section>

@@ -15,6 +15,10 @@ export const nodeKinds = {
   fallback: { title: "Ответ по умолчанию", icon: "↩", color: "border-gray-300" },
 };
 
+export function botLaunchIdFromPath(pathname) {
+  return pathname.match(/^\/api\/bots\/([0-9a-f-]{36})\/launch$/i)?.[1] || null;
+}
+
 export function createDefaultWorkflow() {
   const nodes = [
     { id: "start", type: "workflow", position: { x: 50, y: 210 }, data: { kind: "start", title: "Новый пользователь" } },
