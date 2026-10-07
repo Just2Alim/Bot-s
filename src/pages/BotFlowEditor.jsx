@@ -30,7 +30,7 @@ export default function BotFlowEditor() {
   const [loading, setLoading] = useState(editing);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState("");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiMessages, setAiMessages] = useState([]);
   const [aiBusy, setAiBusy] = useState(false);
@@ -111,7 +111,7 @@ export default function BotFlowEditor() {
   }
 
   async function save() {
-    setSaving(true); setError(""); setSaved(false);
+    setSaving(true); setError(""); setSaved("");
       const config = { businessName, template: templates[category]?.label, description, greeting, features, items, contacts, ownerTelegramId, workflow: { nodes, edges } };
     if (!editing) {
       setField("workflow", config.workflow); setSaving(false); navigate("/create/setup"); return;
@@ -122,7 +122,10 @@ export default function BotFlowEditor() {
       const response = await apiFetch(`/api/bots/${routeBotId}/config`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${authData.session?.access_token || ""}` }, body: JSON.stringify(config) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Не удалось сохранить настройки.");
-      setField("status", result.bot.status); setSaved(true);
+      setField("status", result.bot.status);
+      setSaved(result.bot.status === "Работает на сервере платформы"
+        ? "Сценарий сохранён и применён к работающему боту в Telegram."
+        : "Сценарий сохранён. Бот остановлен: откройте «Мои боты» и нажмите «Запустить», чтобы изменения заработали в Telegram.");
     } catch (exception) { setError(exception.message); }
     finally { setSaving(false); }
   }
@@ -160,7 +163,7 @@ export default function BotFlowEditor() {
         <section className="border-t border-gray-100 pt-4"><div className="flex items-center justify-between"><h2 className="text-sm font-bold text-navy-950">Товары / услуги · ₸</h2><button onClick={addItem} className="text-xs font-semibold text-accent-600">+ Добавить</button></div>{items.map((item, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_76px_24px] items-center gap-1"><input aria-label="Название товара" value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} className="min-w-0 rounded-lg border border-gray-200 px-2 py-2 text-xs" /><input aria-label="Цена в тенге" type="number" min="0" value={item.price} onChange={(event) => updateItem(index, "price", Number(event.target.value))} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs" /><button aria-label="Удалить позицию" onClick={() => removeItem(index)} className="text-lg text-red-500">×</button></div>)}<p className="mt-2 text-[11px] leading-4 text-amber-700">Проверь цены: шаблонные позиции — примеры, а не цены твоей компании.</p></section>
       </aside>
     </div>
-    {(error || saved) && <p role={error ? "alert" : "status"} className={`mt-3 rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{error || "Изменения сохранены. Запущенный бот перезагружен с новым сценарием."}</p>}
+    {(error || saved) && <p role={error ? "alert" : "status"} className={`mt-3 rounded-lg p-3 text-sm ${error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{error || saved}</p>}
     {!editing && <p className="mt-3 text-xs text-gray-400">После сценария добавь реальные позиции и контакты, затем запусти бота.</p>}
     {editing && <p className="mt-3 text-xs text-gray-400">Изменения сразу применятся к запущенному боту. ИИ не отвечает на клиентские сообщения.</p>}
     <p className="sr-only">Шаблон: {templates[category]?.label}; подключённый бот: {botName}</p>

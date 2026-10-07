@@ -440,19 +440,20 @@ const server = createServer(async (req, res) => {
         return response(res, 200, { bot: safeBot(record) });
       } catch (error) { record.status = "Ошибка запуска"; try { await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status } }); } catch { /* Preserve original launch error. */ } return response(res, 502, { error: error.message }); }
     }
-    const editMatch = url.pathname.match(/^\/api\/bots\/([a-f0-9]+)\/config$/);
+    const editMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]{36})\/config$/i);
     if (req.method === "PUT" && editMatch) {
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Нужна действующая сессия Supabase." });
       const record = await getOwnedBot(user, editMatch[1]);
       if (!record) return response(res, 404, { error: "Бот не найден." });
-      const wasRunning = running.has(record.id);
+      // A previous server restart may have cleared the in-memory bot while Supabase still says it was running.
+      const wasRunning = running.has(record.id) || record.status === "Работает на сервере платформы";
       if (wasRunning) { await running.get(record.id).bot.stop(); running.delete(record.id); }
       record.config = configOf(await bodyOf(req), record.config);
       await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { config: record.config, updated_at: new Date().toISOString() } });
       if (wasRunning) { await startBot(record); record.status = "Работает на сервере платформы"; await restCall(user, "bots", { method: "PATCH", query: `?id=eq.${record.id}&owner_id=eq.${user.id}`, body: { status: record.status, updated_at: new Date().toISOString() } }); }
       return response(res, 200, { bot: safeBot(record) });
     }
-    const stopMatch = url.pathname.match(/^\/api\/bots\/([a-f0-9]+)\/stop$/);
+    const stopMatch = url.pathname.match(/^\/api\/bots\/([0-9a-f-]{36})\/stop$/i);
     if (req.method === "POST" && stopMatch) {
       const user = await supabaseUserFromRequest(req); if (!user) return response(res, 401, { error: "Нужна действующая сессия Supabase." });
       const record = await getOwnedBot(user, stopMatch[1]);
