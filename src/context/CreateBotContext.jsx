@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { createDefaultWorkflow } from "../workflow.js";
+import { supabase } from "../lib/supabase.js";
+import { readWorkspace, writeWorkspace } from "../workspace-storage.js";
 
-const storageKey = "bots-kz-workspace-v1";
+const legacyStorageKey = "bots-kz-workspace-v1";
 const templates = {
   shop: {
     label: "Магазин",
@@ -29,9 +31,9 @@ const templates = {
   },
 };
 
-function getInitialState() {
+function getInitialState(userId) {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+    const saved = readWorkspace(userId) || {};
     const category = saved.category === "custom" ? "custom" : templates[saved.category] ? saved.category : "shop";
     const base = templates[category] || templates.shop;
     return { category, description: saved.description || (category === "custom" ? "" : base.description), businessName: saved.businessName || "", features: saved.features || (category === "custom" ? [] : base.features), items: saved.items || (category === "custom" ? [] : base.items), contacts: saved.contacts || { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, ownerTelegramId: saved.ownerTelegramId || "", workflow: saved.workflow || createDefaultWorkflow(), botId: saved.botId || "", botUsername: saved.botUsername || "", botName: saved.botName || "", verified: false, status: saved.status || "Черновик", greeting: saved.greeting || (category === "custom" ? "Здравствуйте! Добро пожаловать. Выберите действие, чтобы продолжить." : base.greeting), aiPlan: saved.aiPlan || null };
@@ -43,11 +45,27 @@ function getInitialState() {
 const CreateBotContext = createContext(null);
 
 export function CreateBotProvider({ children }) {
-  const [state, setState] = useState(getInitialState);
+  const [userId, setUserId] = useState(undefined);
+  const [loadedUserId, setLoadedUserId] = useState(undefined);
+  const [state, setState] = useState(() => getInitialState(null));
   useEffect(() => {
+    if (!supabase) { setUserId(null); return undefined; }
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => { if (active) setUserId(data.session?.user?.id || null); }).catch(() => { if (active) setUserId(null); });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setUserId(session?.user?.id || null));
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
+  useEffect(() => {
+    if (userId === undefined) return;
+    setState(getInitialState(userId));
+    setLoadedUserId(userId);
+    if (userId) localStorage.removeItem(legacyStorageKey);
+  }, [userId]);
+  useEffect(() => {
+    if (!userId || loadedUserId !== userId) return;
     const safeState = Object.fromEntries(Object.entries(state).filter(([key]) => key !== "verified"));
-    localStorage.setItem(storageKey, JSON.stringify(safeState));
-  }, [state]);
+    writeWorkspace(userId, safeState);
+  }, [state, userId, loadedUserId]);
 
   const actions = useMemo(() => ({
     setField: (field, value) => setState((prev) => ({ ...prev, [field]: value })),
@@ -63,6 +81,7 @@ export function CreateBotProvider({ children }) {
     setState,
   }), []);
 
+  if (userId === undefined || loadedUserId !== userId) return <div className="flex min-h-screen items-center justify-center bg-canvas text-sm text-gray-500">Подготавливаем рабочее пространство…</div>;
   return <CreateBotContext.Provider value={{ ...state, ...actions, templates }}>{children}</CreateBotContext.Provider>;
 }
 

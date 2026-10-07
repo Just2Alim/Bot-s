@@ -11,11 +11,11 @@ create table if not exists public.bots (
   status text not null default 'Подключён',
   config jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (owner_id, telegram_id)
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists bots_owner_id_idx on public.bots(owner_id);
+create unique index if not exists bots_telegram_id_uidx on public.bots(telegram_id);
 alter table public.bots enable row level security;
 revoke all on public.bots from anon, authenticated;
 grant select on public.bots to authenticated;
@@ -217,8 +217,10 @@ begin
   if p_owner_id is null then raise exception 'owner is required'; end if;
   insert into public.bots(owner_id, telegram_id, username, bot_name, status)
     values (p_owner_id, p_telegram_id, p_username, p_bot_name, 'Подключён')
-    on conflict (owner_id, telegram_id) do update set username = excluded.username, bot_name = excluded.bot_name, updated_at = now()
+    on conflict (telegram_id) do update set username = excluded.username, bot_name = excluded.bot_name, updated_at = now()
+      where public.bots.owner_id = excluded.owner_id
     returning * into saved_bot;
+  if saved_bot.id is null then raise exception 'BOT_OWNED_BY_ANOTHER_ACCOUNT'; end if;
   insert into public.bot_secrets(bot_id, encrypted_token) values (saved_bot.id, p_encrypted_token)
     on conflict (bot_id) do update set encrypted_token = excluded.encrypted_token, updated_at = now();
   return saved_bot;

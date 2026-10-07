@@ -591,7 +591,12 @@ const server = createServer(async (req, res) => {
       const result = await telegramResponse.json();
       if (!telegramResponse.ok || !result.ok) return response(res, 400, { error: result.description || "Telegram не подтвердил токен." });
       const encryptedToken = encrypt(token);
-      const resultRows = await serviceRpc("create_or_update_bot", { p_owner_id: authUser.id, p_telegram_id: String(result.result.id), p_username: result.result.username, p_bot_name: result.result.first_name, p_encrypted_token: encryptedToken });
+      let resultRows;
+      try { resultRows = await serviceRpc("create_or_update_bot", { p_owner_id: authUser.id, p_telegram_id: String(result.result.id), p_username: result.result.username, p_bot_name: result.result.first_name, p_encrypted_token: encryptedToken }); }
+      catch (error) {
+        if (error.message.includes("BOT_OWNED_BY_ANOTHER_ACCOUNT")) return response(res, 409, { error: "Этот Telegram-бот уже подключён к другому аккаунту. Каждый бот можно подключить только один раз." });
+        throw error;
+      }
       const saved = Array.isArray(resultRows) ? resultRows[0] : resultRows;
       if (!saved?.id) return response(res, 502, { error: "Supabase не сохранил Telegram-бота." });
       const record = { id: saved.id, telegramId: saved.telegram_id, username: saved.username, botName: saved.bot_name, status: saved.status, config: saved.config || {} };
