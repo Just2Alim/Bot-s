@@ -11,6 +11,9 @@ import BotFlowEditor from "./pages/BotFlowEditor.jsx";
 import MyBots from "./pages/MyBots.jsx";
 import Settings from "./pages/Settings.jsx";
 import Auth from "./pages/Auth.jsx";
+import Inbox from "./pages/Inbox.jsx";
+import Welcome from "./pages/Welcome.jsx";
+import AdminResponses from "./pages/AdminResponses.jsx";
 
 export default function App() {
   return (
@@ -20,6 +23,8 @@ export default function App() {
 
       <Route element={<AppLayout />}>
         <Route path="/overview" element={<Overview />} />
+        <Route path="/welcome" element={<Welcome />} />
+        <Route path="/admin/onboarding" element={<AdminResponses />} />
         <Route path="/create" element={<Navigate to="/create/token" replace />} />
         <Route path="/create/token" element={<CreateBotToken />} />
         <Route path="/create/describe" element={<CreateBotDescribe />} />
@@ -28,6 +33,7 @@ export default function App() {
         <Route path="/create/setup" element={<CreateBotSetup />} />
         <Route path="/create/launch" element={<CreateBotLaunch />} />
         <Route path="/bots" element={<MyBots />} />
+        <Route path="/inbox" element={<Inbox />} />
         <Route path="/bots/:botId/edit" element={<BotFlowEditor />} />
         <Route path="/bots/:botId" element={<MyBots />} />
         <Route path="/settings" element={<Settings />} />

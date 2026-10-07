@@ -18,6 +18,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
       OLLAMA_URL: http://ollama:11434
       PUBLIC_APP_ORIGIN: ${PUBLIC_APP_ORIGIN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
     ports:
       - "${APP_PORT:-4174}:4174"
     volumes:

@@ -62,7 +62,7 @@ export default function MyBots() {
   }
 
   return (
-    <div>
+    <div data-tour-id="my-bots">
       <p className="mb-4 text-sm text-gray-400">
         Мои боты / <span className="text-gray-600">{handle}</span>
       </p>
