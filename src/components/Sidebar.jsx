@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { supabase } from "../lib/supabase.js";
 import Logo from "./Logo.jsx";
 
 const links = [
@@ -10,6 +11,8 @@ const links = [
 
 export default function Sidebar() {
   const location = useLocation();
+  if (!supabase) return <aside className="w-60 shrink-0 border-r border-gray-200 bg-white px-4 py-6"><div className="px-2"><Logo /></div><div className="mt-8 rounded-xl bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-950">Подключите Supabase</p><p className="mt-2 text-xs leading-5 text-amber-900">Создайте .env из .env.example, укажите URL и publishable key, примените supabase/schema.sql и перезапустите приложение.</p></div></aside>;
+  if (!supabase) return <aside className="w-60 shrink-0 border-r border-gray-200 bg-white px-4 py-6"><div className="px-2"><Logo /></div><div className="mt-8 rounded-xl bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-950">Подключите Supabase</p><p className="mt-2 text-xs leading-5 text-amber-900">Создайте .env из .env.example, укажите URL и publishable key, примените supabase/schema.sql и перезапустите приложение.</p></div></aside>;
 
   return (
     <aside className="w-60 shrink-0 border-r border-gray-200 bg-white px-4 py-6">

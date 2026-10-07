@@ -18,7 +18,7 @@ export default function CreateBotProgress() {
         <div><p className="text-sm font-semibold text-navy-950">Настройка Telegram-бота</p><p className="mt-1 text-xs text-gray-400">Помощник проведёт вас через каждый шаг</p></div>
         <span className="rounded-full bg-accent-500/10 px-3 py-1 text-xs font-semibold text-accent-600">Шаг {current + 1} из {steps.length}</span>
       </div>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
         {steps.map((step, index) => (
           <Link key={step.path} to={step.path} className="group min-w-0 text-left">
             <div className={`mb-2 h-1.5 rounded-full ${index <= current ? "bg-accent-500" : "bg-gray-100"}`} />

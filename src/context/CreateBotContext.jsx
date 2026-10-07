@@ -33,7 +33,7 @@ function getInitialState() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
     const category = templates[saved.category] ? saved.category : "shop";
-    return { category, description: saved.description || templates[category].description, businessName: saved.businessName || "", features: saved.features || templates[category].features, items: saved.items || templates[category].items, contacts: saved.contacts || { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, workflow: saved.workflow || createDefaultWorkflow(), botId: saved.botId || "", botUsername: saved.botUsername || "", botName: saved.botName || "", verified: false, status: saved.status || "Черновик", greeting: saved.greeting || templates[category].greeting };
+    return { category, description: saved.description || templates[category].description, businessName: saved.businessName || "", features: saved.features || templates[category].features, items: saved.items || templates[category].items, contacts: saved.contacts || { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, workflow: saved.workflow || createDefaultWorkflow(), botId: saved.botId || "", botUsername: saved.botUsername || "", botName: saved.botName || "", verified: false, status: saved.status || "Черновик", greeting: saved.greeting || templates[category].greeting, aiPlan: saved.aiPlan || null };
   } catch {
     return { category: "shop", description: templates.shop.description, businessName: "", features: templates.shop.features, items: templates.shop.items, contacts: { hours: "Ежедневно, 10:00–20:00", address: "", phone: "", language: "Русский и казахский" }, workflow: createDefaultWorkflow(), botId: "", botUsername: "", botName: "", verified: false, status: "Черновик", greeting: templates.shop.greeting };
   }
@@ -53,10 +53,11 @@ export function CreateBotProvider({ children }) {
     setContact: (field, value) => setState((prev) => ({ ...prev, contacts: { ...prev.contacts, [field]: value } })),
     toggleFeature: (feature) => setState((prev) => ({ ...prev, features: prev.features.includes(feature) ? prev.features.filter((item) => item !== feature) : [...prev.features, feature] })),
     applyAiPlan: (plan) => setState((prev) => ({ ...prev, greeting: plan.greeting || prev.greeting })),
+    setWorkflowPlan: (plan) => setState((prev) => ({ ...prev, greeting: plan.greeting || prev.greeting, features: plan.features || prev.features, aiPlan: plan })),
     updateItem: (index, field, value) => setState((prev) => ({ ...prev, items: prev.items.map((item, i) => i === index ? { ...item, [field]: value } : item) })),
     removeItem: (index) => setState((prev) => ({ ...prev, items: prev.items.filter((_, i) => i !== index) })),
     addItem: () => setState((prev) => ({ ...prev, items: [...prev.items, { name: "Новый товар или услуга", price: 0 }] })),
-    chooseTemplate: (category) => { const template = templates[category]; setState((prev) => ({ ...prev, category, description: template.description, features: template.features, items: template.items, greeting: template.greeting, status: "Черновик" })); },
+    chooseTemplate: (category) => { const template = templates[category]; setState((prev) => ({ ...prev, category, description: template.description, features: template.features, items: template.items, greeting: template.greeting, workflow: createDefaultWorkflow(), aiPlan: null, status: "Черновик" })); },
     setState,
   }), []);
 

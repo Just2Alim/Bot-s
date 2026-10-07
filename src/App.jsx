@@ -10,11 +10,13 @@ import CreateBotLaunch from "./pages/CreateBotLaunch.jsx";
 import BotFlowEditor from "./pages/BotFlowEditor.jsx";
 import MyBots from "./pages/MyBots.jsx";
 import Settings from "./pages/Settings.jsx";
+import Auth from "./pages/Auth.jsx";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/auth" element={<Auth />} />
 
       <Route element={<AppLayout />}>
         <Route path="/overview" element={<Overview />} />

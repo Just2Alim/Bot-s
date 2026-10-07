@@ -4,6 +4,12 @@ export const nodeKinds = {
   menu: { title: "Меню кнопок", icon: "☷", color: "border-violet-300" },
   catalog: { title: "Каталог", icon: "🛍️", color: "border-amber-300" },
   booking: { title: "Заявка / запись", icon: "📝", color: "border-pink-300" },
+  question: { title: "Спросить / собрать данные", icon: "❓", color: "border-orange-300" },
+  condition: { title: "Проверка условия", icon: "◇", color: "border-fuchsia-300" },
+  delay: { title: "Пауза и ожидание", icon: "◷", color: "border-sky-300" },
+  notification: { title: "Уведомить владельца", icon: "🔔", color: "border-rose-300" },
+  link: { title: "Открыть ссылку", icon: "↗", color: "border-teal-300" },
+  location: { title: "Запросить геолокацию", icon: "⌖", color: "border-lime-300" },
   contacts: { title: "Контакты", icon: "📍", color: "border-cyan-300" },
   keyword: { title: "Ключевые слова", icon: "⌕", color: "border-indigo-300" },
   fallback: { title: "Ответ по умолчанию", icon: "↩", color: "border-gray-300" },
@@ -17,6 +23,7 @@ export function createDefaultWorkflow() {
     { id: "catalog", type: "workflow", position: { x: 890, y: 25 }, data: { kind: "catalog", title: "Каталог и цены", buttonLabel: "🛍️ Каталог и цены" } },
     { id: "booking", type: "workflow", position: { x: 890, y: 210 }, data: { kind: "booking", title: "Оставить заявку", buttonLabel: "📝 Оставить заявку", text: "Чтобы оставить заявку, свяжитесь с нами по контактам из меню." } },
     { id: "contacts", type: "workflow", position: { x: 890, y: 395 }, data: { kind: "contacts", title: "Контакты", buttonLabel: "📍 Контакты" } },
+    { id: "question", type: "workflow", position: { x: 1190, y: 210 }, data: { kind: "question", title: "Собрать заявку", text: "Что вас интересует? Напишите детали, и мы свяжемся с вами.", buttonLabel: "Оставить заявку" } },
     { id: "fallback", type: "workflow", position: { x: 575, y: 455 }, data: { kind: "fallback", title: "Не понял сообщение", text: "Выберите пункт меню или свяжитесь с нами по указанным контактам." } },
   ];
   const edges = [

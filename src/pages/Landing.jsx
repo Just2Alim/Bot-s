@@ -17,7 +17,7 @@ export default function Landing() {
             Войти
           </Link>
           <Link
-            to="/create/describe"
+            to="/auth?mode=register"
             className="rounded-lg bg-navy-950 px-4 py-2 text-white transition-colors hover:bg-navy-900"
           >
             Начать бесплатно
@@ -36,7 +36,7 @@ export default function Landing() {
           </p>
           <div className="mt-8 flex gap-3">
             <Link
-              to="/create/token"
+            to="/auth"
               className="rounded-lg bg-navy-950 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy-900"
             >
               Создать бота
